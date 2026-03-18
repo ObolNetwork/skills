@@ -66,7 +66,7 @@ export OBOL_GRAFANA_API_TOKEN="glsa_..."
 ### cluster_triage.py — First-Pass Health Check
 
 ```bash
-python3 scripts/cluster_triage.py "Cluster Name" [--network mainnet] [--hours 1]
+python3 ${CLAUDE_SKILL_DIR}/scripts/cluster_triage.py "Cluster Name" [--network mainnet] [--hours 1]
 ```
 
 Outputs JSON with: cluster config, health status (readyz), versions, consensus performance, per-peer participation rates, duty failure reasons, P2P connectivity, beacon node health, balance summary, and log availability.
@@ -74,7 +74,7 @@ Outputs JSON with: cluster config, health status (readyz), versions, consensus p
 ### duty_analysis.py — Slot-Level Deep Dive
 
 ```bash
-python3 scripts/duty_analysis.py "Cluster Name" 13867535 [--duty attester] [--network mainnet]
+python3 ${CLAUDE_SKILL_DIR}/scripts/duty_analysis.py "Cluster Name" 13867535 [--duty attester] [--network mainnet]
 ```
 
 Reconstructs a chronological timeline of consensus events for a specific slot from Loki logs. Shows per-peer: when consensus started, when pre-prepares arrived, round changes, BN call timings, and the final outcome.
@@ -82,7 +82,7 @@ Reconstructs a chronological timeline of consensus events for a specific slot fr
 ### fleet_overview.py — Multi-Cluster Fleet View
 
 ```bash
-python3 scripts/fleet_overview.py [--network mainnet] [--hours 1]
+python3 ${CLAUDE_SKILL_DIR}/scripts/fleet_overview.py [--network mainnet] [--hours 1]
 ```
 
 Aggregates across all clusters: version distribution, BN/VC client diversity, failure rates by reason, worst-performing clusters, and Loki log coverage.

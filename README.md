@@ -1,38 +1,72 @@
 ![Obol Logo](https://obol.tech/obolnetwork.png)
 # Obol Agent Skills
 
-A collection of Claude Code skills to help your Agents use Obol's products and services.
+A Claude Code plugin with skills for running decentralised infrastructure with Obol.
 
-## Getting Started
+## Installation
 
-Link the skills to your Claude agent by adding this repo to your project's skill search path, or copy the `skills/` directory into your `.claude/skills/` folder.
+### As a Claude Code Plugin (Recommended)
+
+```
+/plugin marketplace add ObolNetwork/skills
+/plugin install obol
+```
+
+Reload plugins if needed:
+```
+/reload-plugins
+```
+
+### Manual Installation
+
+Copy the `skills/` directory into your project's `.claude/skills/` folder.
+
+## Configuration
+
+### Required for obol-monitoring skill: Grafana API Token
+
+Set the `OBOL_GRAFANA_API_TOKEN` environment variable. The Obol Core team can provide you with one.
+
+**Option 1 — Shell profile** (recommended):
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+export OBOL_GRAFANA_API_TOKEN="glsa_..."
+```
+
+**Option 2 — Project `.env` file** (see `.env.sample`):
+```bash
+OBOL_GRAFANA_API_TOKEN=glsa_...
+```
 
 ## Available Skills
 
 ### obol-monitoring
 
-Use your agent to explore the monitoring and logging of your distributed validator fleet via Grafana.
-
-Requires the following API Key to be set in your environment. The Obol Core team can provide you with one.
-```bash
-export OBOL_GRAFANA_API_TOKEN="your-grafana-service-account-token"
-```
+Monitor and diagnose Obol DVT cluster performance using Grafana (Prometheus metrics + Loki logs).
 
 **Scripts:**
 - `cluster_triage.py` — First-pass cluster health check
 - `duty_analysis.py` — Deep slot-level failure analysis with timeline reconstruction
 - `fleet_overview.py` — Multi-cluster fleet view with version/client diversity
 
-**Usage:**
-```bash
-# Triage a specific cluster
-python3 scripts/cluster_triage.py "Cluster Name" --network mainnet --hours 1
+**Usage:** Ask Claude to triage a cluster, analyze duty failures, or get a fleet overview. The skill guides Claude through the appropriate diagnostic workflow.
 
-# Analyze a specific duty failure
-python3 scripts/duty_analysis.py "Cluster Name" 13867535 --duty attester
+See [skills/obol-monitoring/SKILL.md](skills/obol-monitoring/SKILL.md) for the full reference including failure reason codes, metrics guide, and triage workflow.
 
-# Fleet-wide overview
-python3 scripts/fleet_overview.py --network mainnet --hours 1
+## Requirements
+
+- Python 3.6+ (stdlib only, no pip packages needed)
+- `OBOL_GRAFANA_API_TOKEN` environment variable
+
+## Adding New Skills
+
+Create a new directory under `skills/` with a `SKILL.md` file:
 ```
-
-See [skills/obol-monitoring/SKILL.md](skills/obol-monitoring/SKILL.md) for the full skill reference including failure reason codes, metrics guide, and triage workflow.
+skills/
+├── obol-monitoring/
+│   ├── SKILL.md
+│   └── scripts/
+└── your-new-skill/
+    ├── SKILL.md
+    └── ...
+```

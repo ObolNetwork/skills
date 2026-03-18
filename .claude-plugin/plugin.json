@@ -1,0 +1,8 @@
+{
+  "name": "obol",
+  "description": "Skills for running decentralised infrastructure and agents with Obol",
+  "version": "1.0.0",
+  "author": {
+    "name": "Obol"
+  }
+}
