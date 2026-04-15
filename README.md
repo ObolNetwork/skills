@@ -53,10 +53,23 @@ Monitor and diagnose Obol DVT cluster performance using Grafana (Prometheus metr
 
 See [skills/obol-monitoring/SKILL.md](skills/obol-monitoring/SKILL.md) for the full reference including failure reason codes, metrics guide, and triage workflow.
 
+### hubspot-crm
+
+Search, read, and update Obol's HubSpot CRM contacts, companies, deals, and notes.
+
+**Scripts:**
+- `auth.py` — OAuth token management with auto-refresh
+- `crm.py` — CRM operations (search, get, update, export contacts/companies/deals/notes)
+
+**Usage:** Ask Claude to search contacts, categorize customers, enrich records, or export CRM data. The skill handles authentication and provides structured access to the HubSpot API.
+
+See [skills/hubspot-crm/SKILL.md](skills/hubspot-crm/SKILL.md) for the full reference including categorization workflow and API details.
+
 ## Requirements
 
 - Python 3.6+ (stdlib only, no pip packages needed)
-- `OBOL_GRAFANA_API_TOKEN` environment variable
+- `OBOL_GRAFANA_API_TOKEN` environment variable (for obol-monitoring)
+- HubSpot OAuth tokens in `~/.claude/hubspot_tokens.json` (for hubspot-crm)
 
 ## Adding New Skills
 
