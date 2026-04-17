@@ -10,10 +10,14 @@ Usage:
     python3 crm.py update-contact ID --property KEY --value VALUE
     python3 crm.py list-companies [--limit N] [--properties p1,p2]
     python3 crm.py get-company ID [--properties p1,p2]
+    python3 crm.py update-company ID --property KEY --value VALUE
     python3 crm.py search-companies [--query QUERY] [--limit N]
     python3 crm.py get-contact-companies CONTACT_ID
     python3 crm.py get-contact-notes CONTACT_ID [--limit N]
     python3 crm.py get-contact-deals CONTACT_ID [--limit N]
+    python3 crm.py get-company-notes COMPANY_ID [--limit N]
+    python3 crm.py create-note (--body BODY | --body-file FILE) [--company ID] [--contact ID] [--deal ID] [--timestamp ISO8601]
+    python3 crm.py update-note NOTE_ID [--body BODY | --body-file FILE] [--timestamp ISO8601]
     python3 crm.py list-properties OBJECT_TYPE [--custom-only]
     python3 crm.py export-contacts [--properties p1,p2] [--output FILE]
 """
@@ -147,6 +151,76 @@ def get_contact_notes(contact_id, limit=10):
     print(json.dumps({"notes": notes}, indent=2))
 
 
+def get_company_notes(company_id, limit=10):
+    assoc = api_request("GET", f"/crm/v3/objects/companies/{company_id}/associations/notes",
+                        params={"limit": limit})
+    note_ids = [r["id"] for r in assoc.get("results", [])][:limit]
+    if not note_ids:
+        print(json.dumps({"notes": []}))
+        return
+
+    notes = []
+    for nid in note_ids:
+        note = api_request("GET", f"/crm/v3/objects/notes/{nid}",
+                           params={"properties": "hs_note_body,hs_timestamp"})
+        notes.append(note)
+    print(json.dumps({"notes": notes}, indent=2))
+
+
+def update_company(company_id, prop, value):
+    data = {"properties": {prop: value}}
+    result = api_request("PATCH", f"/crm/v3/objects/companies/{company_id}", data=data)
+    print(json.dumps(result, indent=2))
+
+
+# HubSpot-defined association type IDs for notes
+NOTE_ASSOCIATION_TYPES = {
+    "contact": 202,
+    "company": 190,
+    "deal": 214,
+    "ticket": 228,
+}
+
+
+def create_note(body, company_id=None, contact_id=None, deal_id=None, timestamp=None):
+    import datetime
+    ts = timestamp or datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+    associations = []
+    for kind, oid in (("company", company_id), ("contact", contact_id), ("deal", deal_id)):
+        if oid:
+            associations.append({
+                "to": {"id": oid},
+                "types": [{
+                    "associationCategory": "HUBSPOT_DEFINED",
+                    "associationTypeId": NOTE_ASSOCIATION_TYPES[kind],
+                }],
+            })
+
+    data = {
+        "properties": {"hs_timestamp": ts, "hs_note_body": body},
+    }
+    if associations:
+        data["associations"] = associations
+
+    result = api_request("POST", "/crm/v3/objects/notes", data=data)
+    print(json.dumps(result, indent=2))
+
+
+def update_note(note_id, body=None, timestamp=None):
+    properties = {}
+    if body is not None:
+        properties["hs_note_body"] = body
+    if timestamp is not None:
+        properties["hs_timestamp"] = timestamp
+    if not properties:
+        print("Nothing to update: provide --body/--body-file or --timestamp.", file=sys.stderr)
+        sys.exit(1)
+
+    result = api_request("PATCH", f"/crm/v3/objects/notes/{note_id}", data={"properties": properties})
+    print(json.dumps(result, indent=2))
+
+
 def get_contact_deals(contact_id, limit=10):
     assoc = get_contact_associations(contact_id, "deals")
     deal_ids = [r["id"] for r in assoc.get("results", [])][:limit]
@@ -265,6 +339,35 @@ def main():
     p.add_argument("id")
     p.add_argument("--limit", "-l", type=int, default=10)
 
+    # get-company-notes
+    p = sub.add_parser("get-company-notes")
+    p.add_argument("id")
+    p.add_argument("--limit", "-l", type=int, default=10)
+
+    # update-company
+    p = sub.add_parser("update-company")
+    p.add_argument("id")
+    p.add_argument("--property", required=True)
+    p.add_argument("--value", required=True)
+
+    # create-note
+    p = sub.add_parser("create-note")
+    body_group = p.add_mutually_exclusive_group(required=True)
+    body_group.add_argument("--body", help="Note body (HTML allowed)")
+    body_group.add_argument("--body-file", help="Read note body from file")
+    p.add_argument("--company", help="Company ID to associate")
+    p.add_argument("--contact", help="Contact ID to associate")
+    p.add_argument("--deal", help="Deal ID to associate")
+    p.add_argument("--timestamp", help="ISO 8601 timestamp (defaults to now)")
+
+    # update-note
+    p = sub.add_parser("update-note")
+    p.add_argument("id")
+    body_group = p.add_mutually_exclusive_group()
+    body_group.add_argument("--body", help="New note body (HTML allowed)")
+    body_group.add_argument("--body-file", help="Read new note body from file")
+    p.add_argument("--timestamp", help="ISO 8601 timestamp")
+
     # list-properties
     p = sub.add_parser("list-properties")
     p.add_argument("object_type")
@@ -301,6 +404,22 @@ def main():
         get_contact_notes(args.id, args.limit)
     elif args.command == "get-contact-deals":
         get_contact_deals(args.id, args.limit)
+    elif args.command == "get-company-notes":
+        get_company_notes(args.id, args.limit)
+    elif args.command == "update-company":
+        update_company(args.id, args.property, args.value)
+    elif args.command == "create-note":
+        body = args.body
+        if args.body_file:
+            with open(args.body_file) as f:
+                body = f.read()
+        create_note(body, args.company, args.contact, args.deal, args.timestamp)
+    elif args.command == "update-note":
+        body = args.body
+        if args.body_file:
+            with open(args.body_file) as f:
+                body = f.read()
+        update_note(args.id, body, args.timestamp)
     elif args.command == "list-properties":
         list_properties(args.object_type, args.custom_only)
     elif args.command == "export-contacts":

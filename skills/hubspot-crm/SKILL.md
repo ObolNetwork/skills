@@ -93,6 +93,25 @@ python3 crm.py list-companies --limit 20
 # Get a specific company
 python3 crm.py get-company <company-id>
 
+# Update a company property
+python3 crm.py update-company <company-id> --property description --value "New description"
+
+# Get notes on a company
+python3 crm.py get-company-notes <company-id> --limit 10
+
+# --- Notes ---
+
+# Create a note and attach it to one or more records. Body can be plain text or HTML.
+python3 crm.py create-note --body "Quick call summary..." --company <company-id>
+
+# For long notes, read the body from a file (timestamp defaults to now; override with --timestamp ISO8601)
+python3 crm.py create-note --body-file /tmp/meeting-notes.html \
+    --company <company-id> --contact <contact-id> \
+    --timestamp "2026-04-17T09:30:00Z"
+
+# Update an existing note's body and/or timestamp
+python3 crm.py update-note <note-id> --body-file /tmp/corrected-notes.html
+
 # --- Associations (contact context) ---
 
 # Get companies associated with a contact
@@ -156,4 +175,5 @@ The token has read/write access to: contacts, companies, deals, tickets, notes, 
 - **Always confirm with the user before writing data** to HubSpot (updates, creates, deletes).
 - When making bulk changes, present a summary for review first.
 - Use search and associations to gather full context on a record before making decisions.
+- **Fix transcription errors before committing meeting notes.** AI meeting transcription (Gemini, Otter, etc.) frequently mishears "Obol" — common misspellings include **OAL**, **Oval**, **Opal**, **O.B.O.L.**. Scan the source notes and replace these with "Obol" (or "Obol Association" where the context is the legal entity) before writing to HubSpot.
 ```
