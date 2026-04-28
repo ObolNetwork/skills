@@ -93,8 +93,12 @@ def exchange_code(code, code_verifier, redirect_uri="http://localhost:3000/oauth
         "Content-Type": "application/x-www-form-urlencoded",
     })
 
-    with urllib.request.urlopen(req) as resp:
-        result = json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(req) as resp:
+            result = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        print(f"HubSpot rejected code exchange ({e.code}): {e.read().decode()}", file=sys.stderr)
+        raise
 
     tokens = {
         "access_token": result["access_token"],
