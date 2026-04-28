@@ -230,6 +230,44 @@ helm upgrade --install prod-dv obol/dv-pod \
   --timeout=10m
 ```
 
+## Example 13: Obol Stack Full Node + DVpod End-to-End
+
+Use Obol Stack to deploy the full Ethereum node the DVpod needs, then deploy `dv-pod` against
+the Obol Stack beacon endpoint.
+
+```bash
+# Step 1: Bring up Obol Stack
+obol stack init
+obol stack up
+
+# Step 2: Deploy Ethereum full node stack (execution + consensus)
+obol network install ethereum --network=hoodi --id dv
+obol network sync ethereum/dv
+obol kubectl get pods -n ethereum-dv
+
+# Step 3: Verify beacon API is reachable
+curl -s http://obol.stack/ethereum-dv/beacon/eth/v1/node/health
+
+# Step 4: Deploy DVpod using Obol Stack beacon endpoint
+helm repo add obol https://obolnetwork.github.io/helm-charts
+helm repo update
+helm upgrade --install my-dv-pod obol/dv-pod \
+  --namespace dv-pod --create-namespace \
+  --set charon.operatorAddress=0xYOUR_ADDRESS \
+  --set network=hoodi \
+  --set 'charon.beaconNodeEndpoints[0]=http://obol.stack/ethereum-dv/beacon' \
+  --set secrets.defaultEnrPrivateKey="" \
+  --timeout=10m
+
+# Step 5: Get ENR and monitor startup
+kubectl get secret my-dv-pod-enr-key -n dv-pod -o jsonpath='{.data.enr}' | base64 -d
+kubectl get pods -n dv-pod -l app.kubernetes.io/instance=my-dv-pod
+kubectl logs -n dv-pod -l app.kubernetes.io/instance=my-dv-pod -c dkg-sidecar --tail=50
+```
+
+If `obol.stack` DNS is unavailable from where DVpod runs, use a reachable internal service endpoint
+for the consensus client beacon API in `charon.beaconNodeEndpoints`.
+
 ## Quick Status Check Commands
 
 ```bash

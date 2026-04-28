@@ -44,6 +44,21 @@ For the full values reference, see [values-reference.md](values-reference.md).
 For troubleshooting patterns, see [troubleshooting.md](troubleshooting.md).
 For deployment examples, see [examples.md](examples.md).
 
+## Key Terms and IDs
+
+- `config_hash`: pre-DKG cluster definition identifier (`0x` + 64 hex chars)
+- `lock_hash`: post-DKG cluster lock identifier (`0x` + 64 hex chars)
+- `charon.operatorAddress`: must match the operator address assigned on Launchpad for that node
+- ENR: node identity record used by DKG sidecar for cluster matching
+
+## Input Validation (Before Deploy/Troubleshoot)
+
+Validate these early to avoid hidden failures:
+- Operator address must be `0x` + 40 hex chars
+- If provided, `config_hash` / `lock_hash` must be `0x` + 64 hex chars
+- Network must be one of `mainnet`, `sepolia`, or `hoodi`
+- Beacon endpoint must answer `<beacon-url>/eth/v1/node/health`
+
 ## Helm Repo Setup
 
 If the user hasn't added the Obol helm repo yet, guide them:
@@ -52,6 +67,51 @@ If the user hasn't added the Obol helm repo yet, guide them:
 helm repo add obol https://obolnetwork.github.io/helm-charts
 helm repo update
 ```
+
+## Choose Deployment Mode First
+
+Use this quick decision rule before deploy:
+
+- **Mode 1: External beacon endpoint ("Nick way")**
+  - Use when the user already has a reachable beacon API endpoint.
+  - Example endpoint: `https://ethereum-beacon-api.publicnode.com`
+  - Pros: fastest setup, no local full node deployment required.
+  - Tradeoff: depends on external provider reliability/limits.
+
+- **Mode 2: Obol Stack full node**
+  - Use when the user wants local full-node ownership or no external beacon dependency.
+  - Pros: full control (execution + consensus) and clear local dependency chain.
+  - Tradeoff: more local resources needed and slower setup.
+
+Both modes are valid and supported. The key requirement is that
+`charon.beaconNodeEndpoints[0]` is reachable from the DVpod.
+
+## Obol Stack Full Node Setup (Recommended)
+
+If the user wants to run DVpod with a full node provided by Obol Stack, guide them through this
+preflight before `dv-pod` deployment:
+
+```bash
+# 1) Start Obol Stack
+obol stack init
+obol stack up
+
+# 2) Install and sync an Ethereum deployment (example: hoodi with id dv)
+obol network install ethereum --network=hoodi --id dv
+obol network sync ethereum/dv
+
+# 3) Verify execution + consensus clients are running
+obol kubectl get pods -n ethereum-dv
+
+# 4) Verify the beacon endpoint responds
+curl -s http://obol.stack/ethereum-dv/beacon/eth/v1/node/health
+```
+
+Use this endpoint for DVpod:
+- `http://obol.stack/ethereum-<id>/beacon` (e.g. `http://obol.stack/ethereum-dv/beacon`)
+
+If the user runs everything inside the cluster, they may use the internal lighthouse service
+endpoint instead of `obol.stack`.
 
 ## Action: deploy
 
@@ -97,7 +157,7 @@ indefinitely without finding an invite — this is a common source of confusion.
 
 ### Deployment Scenarios
 
-**Scenario A: Fresh group cluster (most common)**
+**Scenario A: Fresh group cluster with external beacon endpoint ("Nick way")**
 - Auto-generates ENR
 - DKG sidecar polls Obol API waiting for cluster creation on Launchpad
 - User creates/joins cluster on the network-specific Launchpad after deploy
@@ -109,6 +169,27 @@ helm upgrade --install <release> obol/dv-pod \
   --set charon.operatorAddress=<address> \
   --set network=<network> \
   --set 'charon.beaconNodeEndpoints[0]=<beacon-url>' \
+  --set secrets.defaultEnrPrivateKey="" \
+  --timeout=10m
+```
+
+**Scenario A2: Fresh group cluster using Obol Stack full node**
+- Obol Stack provides the execution + consensus clients first
+- DVpod is configured to use Obol Stack beacon endpoint
+
+```bash
+# Preflight full node
+obol stack init
+obol stack up
+obol network install ethereum --network=<network> --id <stack-id>
+obol network sync ethereum/<stack-id>
+
+# Deploy DVpod against Obol Stack beacon API
+helm upgrade --install <release> obol/dv-pod \
+  --namespace <namespace> --create-namespace \
+  --set charon.operatorAddress=<address> \
+  --set network=<network> \
+  --set 'charon.beaconNodeEndpoints[0]=http://obol.stack/ethereum-<stack-id>/beacon' \
   --set secrets.defaultEnrPrivateKey="" \
   --timeout=10m
 ```
@@ -153,6 +234,10 @@ After deploying, automatically:
 1. Wait for pods to be ready
 2. Retrieve and display the public ENR
 3. Show next steps (Launchpad URL, DKG monitoring)
+4. Validate beacon reachability from charon:
+   `kubectl exec -n <namespace> <pod> -c charon -- wget -qO- <beacon-url>/eth/v1/node/health`
+5. If using Obol Stack, verify full node namespace health:
+   `obol kubectl get pods -n ethereum-<stack-id>`
 
 ## Action: status
 
@@ -329,6 +414,12 @@ kubectl delete secret charon-enr-private-key -n <namespace>
   - **Sepolia:** https://sepolia.launchpad.obol.org
 - The Obol API endpoint is https://api.obol.tech
 - If the user mentions `$ARGUMENTS`, parse it to determine the action and any additional context.
+
+## Capabilities and Limits
+
+- This skill can deploy, upgrade, monitor, and troubleshoot `dv-pod` on Kubernetes.
+- This skill cannot perform Launchpad actions for the user (cluster creation, invite acceptance, operator signatures).
+- DKG completion depends on all external operator steps being completed on Launchpad.
 
 ## Parsing $ARGUMENTS
 
