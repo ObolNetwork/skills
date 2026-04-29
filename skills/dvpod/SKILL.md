@@ -53,9 +53,9 @@ helm repo add obol https://obolnetwork.github.io/helm-charts
 helm repo update
 ```
 
-## Choose Deployment Mode First
+## Deployment Prerequisites
 
-Use this quick decision rule before deploy:
+Use this quick check before deploy:
 
 - **Mode 1: Helm chart mode**
   - Use when the user already has a reachable beacon API endpoint (external or locally managed).
@@ -63,7 +63,6 @@ Use this quick decision rule before deploy:
     - external: `https://ethereum-beacon-api.publicnode.com`
     - local/in-cluster: `http://<your-beacon-service>:5052`
   - Pros: fastest DVpod setup.
-  - Tradeoff: full node lifecycle is managed outside this DVpod flow.
   
 The key requirement is that
 `charon.beaconNodeEndpoints[0]` is reachable from the DVpod.
