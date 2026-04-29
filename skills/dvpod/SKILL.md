@@ -72,7 +72,7 @@ helm repo update
 
 Use this quick decision rule before deploy:
 
-- **Mode 1: External beacon endpoint ("Nick way")**
+- **Mode 1: External beacon endpoint ("Helm chart mode")**
   - Use when the user already has a reachable beacon API endpoint.
   - Example endpoint: `https://ethereum-beacon-api.publicnode.com`
   - Pros: fastest setup, no local full node deployment required.
@@ -123,6 +123,10 @@ Deploy a new DVpod. Gather the following from the user before deploying:
 3. **Operator address** — Ethereum address (0x...) for the operator
 4. **Network** — mainnet, sepolia, or hoodi (default: mainnet)
 
+**Important:** Always ask the user which real operator address they want to use before deploy.
+Do not invent or default this value. This address must be the one the user will use to sign in
+Obol Launchpad.
+
 ### Optional but Important
 5. **Beacon node endpoint(s)** — URL(s) of beacon node(s). If not provided, the user will need to configure this later.
 6. **Validator client type** — lighthouse (default), teku, prysm, nimbus, or lodestar
@@ -157,11 +161,12 @@ indefinitely without finding an invite — this is a common source of confusion.
 
 ### Deployment Scenarios
 
-**Scenario A: Fresh group cluster with external beacon endpoint ("Nick way")**
+**Scenario A: Fresh group cluster with external beacon endpoint ("Helm chart mode")**
 - Auto-generates ENR
 - DKG sidecar polls Obol API waiting for cluster creation on Launchpad
 - User creates/joins cluster on the network-specific Launchpad after deploy
 - Each node must have the correct operator address matching its Launchpad registration
+- Ask the user for the real `charon.operatorAddress` before running Helm
 
 ```bash
 helm upgrade --install <release> obol/dv-pod \
@@ -176,6 +181,7 @@ helm upgrade --install <release> obol/dv-pod \
 **Scenario A2: Fresh group cluster using Obol Stack full node**
 - Obol Stack provides the execution + consensus clients first
 - DVpod is configured to use Obol Stack beacon endpoint
+- Ask the user for the real `charon.operatorAddress` before running Helm
 
 ```bash
 # Preflight full node
@@ -233,10 +239,14 @@ helm upgrade --install <release> obol/dv-pod \
 After deploying, automatically:
 1. Wait for pods to be ready
 2. Retrieve and display the public ENR
-3. Show next steps (Launchpad URL, DKG monitoring)
-4. Validate beacon reachability from charon:
+3. Show next steps:
+   - remind the user which operator address they deployed with
+   - give the correct Launchpad URL for the selected network
+   - tell them to sign with that same operator address in Launchpad
+4. Start DKG monitoring
+5. Validate beacon reachability from charon:
    `kubectl exec -n <namespace> <pod> -c charon -- wget -qO- <beacon-url>/eth/v1/node/health`
-5. If using Obol Stack, verify full node namespace health:
+6. If using Obol Stack, verify full node namespace health:
    `obol kubectl get pods -n ethereum-<stack-id>`
 
 ## Action: status
