@@ -148,38 +148,6 @@ done
 - **Invalid cluster-lock.json:** Check Charon logs for specific error messages.
 - **Port conflicts:** Ensure ports 3600, 3610, 3620 are not conflicting.
 
-### Obol Stack Beacon Endpoint Issues
-
-**Symptoms:** DVpod deploys, but Charon logs show beacon connection failures/timeouts when using
-`http://obol.stack/ethereum-<id>/beacon`.
-
-**Causes & Fixes:**
-- **Ethereum deployment not synced in Obol Stack:**
-  ```bash
-  obol network sync ethereum/<id>
-  obol kubectl get pods -n ethereum-<id>
-  ```
-- **Consensus client not healthy yet:**
-  ```bash
-  curl -s http://obol.stack/ethereum-<id>/beacon/eth/v1/node/health
-  ```
-  Wait until it reports healthy before expecting Charon to start cleanly.
-- **`obol.stack` DNS not resolvable from DVpod namespace:** Test from charon container:
-  ```bash
-  kubectl exec -n <ns> <pod> -c charon -- wget -qO- http://obol.stack/ethereum-<id>/beacon/eth/v1/node/health 2>&1
-  ```
-  If name resolution fails, switch `charon.beaconNodeEndpoints[0]` to a reachable in-cluster service URL.
-- **Wrong network pairing:** Ensure DVpod `network` value matches the Obol Stack Ethereum network
-  (`mainnet`, `sepolia`, or `hoodi`).
-- **Path mismatch:** The endpoint must include `/beacon` in front of beacon API routes.
-
-Example fix:
-```bash
-helm upgrade <release> obol/dv-pod -n <ns> \
-  --reuse-values \
-  --set 'charon.beaconNodeEndpoints[0]=http://obol.stack/ethereum-<id>/beacon'
-```
-
 ### Local k3d/macOS Mount Error in dkg-sidecar
 
 **Symptoms:** Init container fails with an error similar to:
@@ -195,6 +163,7 @@ helm upgrade <release> obol/dv-pod -n <ns> \
 ```
 
 **Note:** This workaround is for test/dev only; data is not persisted across restarts.
+This chart-level mount-path issue is expected to be fixed soon.
 
 ### Validator Client Not Starting
 
