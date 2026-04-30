@@ -75,11 +75,15 @@ Deploy a new DVpod. Gather the following from the user before deploying:
 1. **Release name** — a name for this deployment (e.g., `my-dv-pod`)
 2. **Namespace** — Kubernetes namespace (default: `dv-pod`)
 3. **Operator address** — Ethereum address (0x...) for the operator
-4. **Network** — mainnet, sepolia, or hoodi (default: mainnet)
+4. **Network** — `mainnet`, `sepolia`, or `hoodi`
 
-**Important:** Always ask the user which real operator address they want to use before deploy.
-Do not invent or default this value. This address must be the one the user will use to sign in
-Obol Launchpad.
+**Input collection rules before deploy:**
+- Ask the user for all four deploy inputs: release name, namespace, operator address, and network.
+- If release name is not provided, the agent may choose a sensible release default and confirm it.
+- If namespace is not provided, the agent may choose `dv-pod` (or an existing DVpod namespace) and confirm it.
+- **Do not invent or default** `operatorAddress`; it must come from the user.
+- **Do not invent or default** `network`; it must come from the user.
+- The operator address must be the same address the user will use to sign in Obol Launchpad.
 
 ### Optional but Important
 5. **Beacon node endpoint(s)** — URL(s) of beacon node(s). If not provided, the user will need to configure this later.
@@ -345,7 +349,8 @@ kubectl delete secret charon-enr-private-key -n <namespace>
 
 - When the user's request doesn't match a specific action, use your knowledge of the chart to help.
 - Always check `helm list` and `kubectl get pods` first to understand existing state.
-- If the user provides a namespace, use it. If not, check for existing DVpod deployments or default to `dv-pod`.
+- If the user provides a namespace, use it. If not, check for existing DVpod deployments or default to `dv-pod` and confirm.
+- Require the user to explicitly provide `network` and `operatorAddress` before deployment.
 - When showing ENRs, format them clearly — they are long strings the user may need to copy.
 - For network selection, map friendly names: mainnet=1, sepolia=11155111, hoodi=560048.
 - The Obol Launchpad URLs are network-specific:
@@ -360,6 +365,7 @@ kubectl delete secret charon-enr-private-key -n <namespace>
 - This skill can deploy, upgrade, monitor, and troubleshoot `dv-pod` on Kubernetes.
 - This skill cannot perform Launchpad actions for the user (cluster creation, invite acceptance, operator signatures).
 - DKG completion depends on all external operator steps being completed on Launchpad.
+- Solo-flow DKG is not supported.
 
 ## Parsing $ARGUMENTS
 
