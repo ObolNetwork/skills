@@ -207,12 +207,18 @@ def extract_logfmt(line, field):
 
 def parse_bn_client(version):
     """Extract BN client name from version string."""
-    if "Lighthouse" in version: return "Lighthouse"
-    if "teku" in version.lower(): return "Teku"
-    if "Prysm" in version: return "Prysm"
-    if "Nimbus" in version: return "Nimbus"
-    if "Lodestar" in version: return "Lodestar"
-    if "Grandine" in version: return "Grandine"
+    if "Lighthouse" in version:
+        return "Lighthouse"
+    if "teku" in version.lower():
+        return "Teku"
+    if "Prysm" in version:
+        return "Prysm"
+    if "Nimbus" in version:
+        return "Nimbus"
+    if "Lodestar" in version:
+        return "Lodestar"
+    if "Grandine" in version:
+        return "Grandine"
     return "Unknown"
 
 
@@ -221,10 +227,16 @@ def parse_vc_client(user_agent):
     if not user_agent:
         return "Lighthouse"  # Lighthouse VC doesn't send user-agent
     ua = user_agent.lower()
-    if "lodestar" in ua: return "Lodestar"
-    if "prysm" in ua: return "Prysm"
-    if "teku" in ua: return "Teku"
-    if "nim-presto" in ua or "nimbus" in ua: return "Nimbus"
-    if "vouch" in ua: return "Vouch"
-    if "go-http-client" in ua: return "Go-http-client"
+    if "lodestar" in ua:
+        return "Lodestar"
+    if "prysm" in ua:
+        return "Prysm"
+    if "teku" in ua:
+        return "Teku"
+    if "nim-presto" in ua or "nimbus" in ua:
+        return "Nimbus"
+    if "vouch" in ua:
+        return "Vouch"
+    if "go-http-client" in ua:
+        return "Go-http-client"
     return user_agent[:30]
