@@ -1,4 +1,3 @@
-```skill
 ---
 name: dvpod
 description: |

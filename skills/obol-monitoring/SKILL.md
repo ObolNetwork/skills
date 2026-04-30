@@ -1,4 +1,3 @@
-```skill
 ---
 name: obol-monitoring
 description: Monitor and diagnose Obol DVT cluster performance using their hosted Grafana (Prometheus metrics + Loki logs)
@@ -314,4 +313,3 @@ If the issue is intermittent or slot-specific, use `duty_analysis.py` for a spec
 - [CDVN Repo](https://github.com/ObolNetwork/charon-distributed-validator-node) — Standard deployment
 - [LCDVN Repo](https://github.com/ObolNetwork/lido-charon-distributed-validator-node) — Lido-specific deployment
 - [Charon Source](https://github.com/ObolNetwork/charon) — Charon source code
-```
