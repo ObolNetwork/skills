@@ -29,6 +29,9 @@ Quick reference for the most important `dv-pod` Helm chart values. For the compl
 | `charon.featureSet` | Feature set: alpha, beta, stable | `stable` |
 | `charon.logLevel` | Log level: debug, info, warn, error | `info` |
 | `charon.logFormat` | Log format: console, logfmt, json | `json` |
+| `charon.lokiAddresses` | Loki server URL(s) — Charon ships logfmt logs here in addition to stderr | `""` |
+| `charon.lokiService` | Service label sent with logs to Loki | `""` |
+| `charon.monitoringAddress` | Listen address for monitoring API (Prometheus, pprof) | `0.0.0.0:3620` |
 | `charon.p2pRelays` | libp2p relay URLs | — |
 | `charon.p2pExternalHostname` | External P2P hostname | — |
 | `charon.directConnectionEnabled` | Pod-to-pod direct P2P | `true` |
@@ -80,12 +83,22 @@ Quick reference for the most important `dv-pod` Helm chart values. For the compl
 
 ## Monitoring
 
+The chart exposes three independent monitoring paths. They can be combined.
+
 | Value | Description | Default |
 |-------|-------------|---------|
-| `centralMonitoring.enabled` | Enable central monitoring | `false` |
-| `centralMonitoring.promEndpoint` | Prometheus remote write URL | `https://vm.monitoring.gcp.obol.tech/write` |
-| `centralMonitoring.token` | Monitoring auth token | — |
-| `serviceMonitor.enabled` | Enable Prometheus ServiceMonitor | `false` |
+| `centralMonitoring.enabled` | Deploy a bundled Prometheus pod (`prom/prometheus:v3.11.1`, port 9090) that scrapes Charon `:3620` every 12s and remote-writes to `promEndpoint` | `false` |
+| `centralMonitoring.promEndpoint` | Remote-write target URL for the bundled Prometheus | `https://vm.monitoring.gcp.obol.tech/write` |
+| `centralMonitoring.token` | Bearer token attached to remote-write requests | — |
+| `serviceMonitor.enabled` | Create a `ServiceMonitor` CRD for an existing Prometheus Operator in the cluster to scrape | `false` |
+| `serviceMonitor.interval` | Scrape interval | — |
+| `serviceMonitor.scheme` | Scrape scheme (http/https) | — |
+| `charon.lokiAddresses` | Push Charon logfmt logs to a Loki endpoint (no sidecar required) | `""` |
+
+Notes:
+- `centralMonitoring.enabled` deploys a local Prometheus pod in the namespace in addition to configuring remote-write. Override `promEndpoint` to point at your own remote-write target if you don't want to ship to Obol's hosted backend.
+- The bundled Prometheus is reachable in-cluster as `prometheus:9090` (you can port-forward or point a Grafana at it).
+- `serviceMonitor` and `centralMonitoring` are independent — using one doesn't disable the other.
 
 ## Resources
 
