@@ -37,14 +37,13 @@ for skill_dir in skill_dirs:
 
     content = skill_md.read_text()
 
-    # Check frontmatter exists
-    if not content.startswith("```skill\n---"):
-        errors.append(f"{skill_dir.name}: SKILL.md must start with ```skill frontmatter block")
+    # Check frontmatter exists (plain YAML frontmatter only)
+    if not content.startswith("---"):
+        errors.append(f"{skill_dir.name}: SKILL.md must start with plain --- frontmatter")
         continue
 
     # Extract frontmatter
     try:
-        # Find the YAML between --- markers inside the ```skill block
         first_marker = content.index("---") + 3
         second_marker = content.index("---", first_marker)
         frontmatter = content[first_marker:second_marker]
