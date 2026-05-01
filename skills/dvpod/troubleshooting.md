@@ -33,7 +33,7 @@ kubectl get secrets -n <ns> | grep -E "enr|charon"
 
 ## Common Issues
 
-## Interpreting Results Quickly
+### Interpreting Results Quickly
 
 - DKG sidecar polling is normal right after deploy; persistent polling usually means Launchpad/operator mismatch or pending signatures.
 - Missing `/charon-data/cluster-lock.json` means DKG has not completed yet.

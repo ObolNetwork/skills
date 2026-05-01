@@ -56,7 +56,7 @@ helm repo update
 
 Use this quick check before deploy:
 
-- **Mode 1: Helm chart mode**
+- **Helm chart mode**
   - Use when the user already has a reachable beacon API endpoint (external or locally managed).
   - Example endpoints:
     - external: `https://ethereum-beacon-api.publicnode.com`
