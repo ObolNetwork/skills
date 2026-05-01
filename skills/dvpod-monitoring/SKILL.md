@@ -8,7 +8,7 @@ description: |
   Grafana with cross-cluster fleet view, use the `obol-monitoring` skill.
 user-invocable: true
 disable-model-invocation: false
-allowed-tools: Read, Grep, Glob, Bash, Bash(kubectl get *), Bash(kubectl logs *), Bash(helm list *), Bash(helm get values *), Bash(curl -sG *)
+allowed-tools: Read, Grep, Glob, Bash, Bash(kubectl get *), Bash(kubectl logs *), Bash(kubectl port-forward *), Bash(helm list *), Bash(helm get values *), Bash(curl -sG *), Bash(bash *dvpod-monitoring/health.sh*)
 argument-hint: "[query type] [release] — e.g. health my-dv-pod, errors, peers, duties, logs"
 ---
 
@@ -67,6 +67,21 @@ Use `AskUserQuestion` to clarify, but skip if the request is already specific.
 3. **Release scope** — usually inferred from discovery; only ask if more than one DVpod release is present.
 
 ## Execution
+
+### Quick health snapshot (preferred for `health` action)
+
+For the standard health check (readyz, active validators, peer connectivity, beacon node visibility, recent error/warn summary), run the bundled script:
+
+```bash
+bash skills/dvpod-monitoring/health.sh [release] [namespace]
+```
+
+- With no args, auto-detects the release if exactly one DVpod is deployed.
+- With release only, looks up the namespace via `helm list -A`.
+- Requires `centralMonitoring.enabled=true` (bundled Prometheus). Errors out with guidance if not.
+- Exits non-zero only on infra failures (missing tools, Prometheus port-forward fails, etc.) — not on degraded health. Always show the script's stdout to the user.
+
+Use this for **all** routine `/dvpod-monitoring health` invocations. Fall through to the per-query path below only when the user asks for something the snapshot doesn't cover (custom PromQL, deep log search, specific incident windows).
 
 ### PromQL via bundled or cluster Prometheus
 
