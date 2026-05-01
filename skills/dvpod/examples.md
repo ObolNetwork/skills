@@ -243,5 +243,5 @@ kubectl get secret charon-enr-private-key -n dv-pod -o jsonpath='{.data.enr}' | 
 kubectl logs -n dv-pod -l app.kubernetes.io/instance=my-dv-pod -c dkg-sidecar --tail=20
 
 # Check if DKG completed
-kubectl exec -n dv-pod my-dv-pod-dv-pod-0 -c charon -- ls /charon-data/cluster-lock.json 2>/dev/null && echo "DKG COMPLETE" || echo "DKG NOT YET COMPLETE"
+kubectl exec -n dv-pod my-dv-pod-0 -c charon -- ls /charon-data/cluster-lock.json 2>/dev/null && echo "DKG COMPLETE" || echo "DKG NOT YET COMPLETE"
 ```

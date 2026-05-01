@@ -178,7 +178,8 @@ After deploying, automatically:
    - remind the user which operator address they deployed with
    - give the correct Launchpad URL for the selected network
    - tell them to sign with that same operator address in Launchpad
-4. Start DKG monitoring
+4. Start DKG monitoring:
+   `kubectl logs -n <ns> <pod> -c dkg-sidecar --follow`
 5. Validate beacon reachability from charon:
    `kubectl exec -n <namespace> <pod> -c charon -- wget -qO- <beacon-url>/eth/v1/node/health`
 
