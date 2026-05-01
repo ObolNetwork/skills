@@ -179,7 +179,9 @@ helm upgrade --install my-dv-pod obol/dv-pod \
   --timeout=10m
 ```
 
-## Example 10: Enable Central Monitoring
+## Example 10: Enable Bundled Prometheus + Central Remote-Write
+
+`centralMonitoring.enabled=true` deploys a local Prometheus pod (`prom/prometheus:v3.11.1`, in-cluster service `prometheus:9090`) that scrapes Charon every 12s and remote-writes to `centralMonitoring.promEndpoint` (default: Obol's hosted backend).
 
 ```bash
 helm upgrade --install my-dv-pod obol/dv-pod \
@@ -188,6 +190,27 @@ helm upgrade --install my-dv-pod obol/dv-pod \
   --set 'charon.beaconNodeEndpoints[0]=http://beacon:5052' \
   --set centralMonitoring.enabled=true \
   --set centralMonitoring.token=YOUR_MONITORING_TOKEN \
+  --timeout=10m
+```
+
+To remote-write to your own backend instead of Obol's, override `centralMonitoring.promEndpoint`:
+
+```bash
+  --set centralMonitoring.promEndpoint=https://prom.example.com/api/v1/write \
+  --set centralMonitoring.token=YOUR_TOKEN
+```
+
+## Example 10b: Ship Logs to Loki
+
+Charon can push structured logs directly to a Loki endpoint (no log-shipping sidecar required), in addition to stderr:
+
+```bash
+helm upgrade --install my-dv-pod obol/dv-pod \
+  --namespace dv-pod --create-namespace \
+  --set charon.operatorAddress=0xYOUR_ADDRESS \
+  --set 'charon.beaconNodeEndpoints[0]=http://beacon:5052' \
+  --set charon.lokiAddresses=http://loki.monitoring.svc:3100/loki/api/v1/push \
+  --set charon.lokiService=my-dv-pod \
   --timeout=10m
 ```
 

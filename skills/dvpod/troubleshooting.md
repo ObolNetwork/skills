@@ -232,11 +232,24 @@ If DKG fails or gets stuck:
 ## Monitoring Endpoints
 
 ```bash
-# Charon metrics
+# Charon metrics (always exposed)
 kubectl port-forward -n <ns> <pod> 3620:3620
 # Visit: http://localhost:3620/metrics
 
 # Validator client metrics (if enabled)
 kubectl port-forward -n <ns> <pod> 5064:5064
 # Visit: http://localhost:5064/metrics
+
+# Bundled Prometheus UI (only when centralMonitoring.enabled=true)
+kubectl port-forward -n <ns> svc/prometheus 9090:9090
+# Visit: http://localhost:9090
+```
+
+If `centralMonitoring.enabled=true` was set, a `prometheus` Deployment runs in the
+namespace and scrapes Charon at `:3620` every 12s, then remote-writes to
+`centralMonitoring.promEndpoint`. Inspect it with:
+
+```bash
+kubectl get deploy,svc,cm -n <ns> -l app=prometheus
+kubectl logs -n <ns> deploy/prometheus
 ```
