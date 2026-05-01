@@ -8,7 +8,7 @@ description: |
   Grafana with cross-cluster fleet view, use the `obol-monitoring` skill.
 user-invocable: true
 disable-model-invocation: false
-allowed-tools: Read, Grep, Glob, Bash
+allowed-tools: Read, Grep, Glob, Bash, Bash(kubectl get *), Bash(kubectl logs *), Bash(helm list *), Bash(helm get values *), Bash(curl -sG *)
 argument-hint: "[query type] [release] — e.g. health my-dv-pod, errors, peers, duties, logs"
 ---
 

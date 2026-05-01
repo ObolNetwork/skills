@@ -10,7 +10,7 @@ description: |
   `dvpod-monitoring` skill instead.
 user-invocable: true
 disable-model-invocation: false
-allowed-tools: Read, Grep, Glob, Bash
+allowed-tools: Read, Grep, Glob, Bash, Bash(kubectl get *), Bash(kubectl logs *), Bash(kubectl wait *), Bash(helm list *), Bash(helm get values *)
 argument-hint: "[action] [options] — actions: deploy, status, logs, troubleshoot, upgrade, backup, recover, enr, destroy"
 ---
 
