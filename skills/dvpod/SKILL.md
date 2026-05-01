@@ -1,11 +1,13 @@
 ---
 name: dvpod
 description: |
-  Deploy, manage, monitor, and troubleshoot Obol DVpod (Distributed Validator Pod) deployments
-  on Kubernetes using the dv-pod Helm chart. Use when the user wants to deploy a new DVpod,
+  Deploy, manage, and troubleshoot Obol DVpod (Distributed Validator Pod) deployments on
+  Kubernetes using the dv-pod Helm chart. Use when the user wants to deploy a new DVpod,
   check status, troubleshoot issues, upgrade, backup, or recover a DVpod deployment.
   Covers fresh cluster creation, joining existing clusters, ENR management, DKG orchestration,
-  and validator client configuration.
+  validator client configuration, and configuring monitoring/log shipping.
+  For read-only metric and log queries against an already-deployed DVpod, use the
+  `dvpod-monitoring` skill instead.
 user-invocable: true
 disable-model-invocation: false
 allowed-tools: Read, Grep, Glob, Bash
@@ -42,6 +44,17 @@ Reference the chart's values, templates, and documentation when answering questi
 For the full values reference, see [values-reference.md](values-reference.md).
 For troubleshooting patterns, see [troubleshooting.md](troubleshooting.md).
 For deployment examples, see [examples.md](examples.md).
+For namespace / release / pod resolution, see [discovery.md](discovery.md) — also used by the `dvpod-monitoring` skill.
+
+## Monitoring options
+
+The `dv-pod` chart exposes three independent monitoring paths (see [values-reference.md](values-reference.md#monitoring) for the full table):
+
+- `centralMonitoring.enabled=true` deploys a bundled Prometheus pod that scrapes Charon and remote-writes to `centralMonitoring.promEndpoint` (default: Obol's hosted backend; override for self-hosted).
+- `serviceMonitor.enabled=true` creates a `ServiceMonitor` CRD for an existing in-cluster Prometheus Operator to scrape.
+- `charon.lokiAddresses` makes Charon push logfmt logs directly to a Loki endpoint, in addition to stderr.
+
+These can be combined. Configuring or changing them is part of this skill (it's a `helm upgrade`). Querying the metrics or logs after they are wired up is the `dvpod-monitoring` skill's job — hand off there once the user is past configuration.
 
 ## Helm Repo Setup
 
