@@ -1,4 +1,3 @@
-```skill
 ---
 name: dvpod
 description: |
@@ -53,6 +52,20 @@ helm repo add obol https://obolnetwork.github.io/helm-charts
 helm repo update
 ```
 
+## Deployment Prerequisites
+
+Use this quick check before deploy:
+
+- **Helm chart mode**
+  - Use when the user already has a reachable beacon API endpoint (external or locally managed).
+  - Example endpoints:
+    - external: `https://ethereum-beacon-api.publicnode.com`
+    - local/in-cluster: `http://<your-beacon-service>:5052`
+  - Pros: fastest DVpod setup.
+  
+The key requirement is that
+`charon.beaconNodeEndpoints[0]` is reachable from the DVpod.
+
 ## Action: deploy
 
 Deploy a new DVpod. Gather the following from the user before deploying:
@@ -61,7 +74,15 @@ Deploy a new DVpod. Gather the following from the user before deploying:
 1. **Release name** — a name for this deployment (e.g., `my-dv-pod`)
 2. **Namespace** — Kubernetes namespace (default: `dv-pod`)
 3. **Operator address** — Ethereum address (0x...) for the operator
-4. **Network** — mainnet, sepolia, or hoodi (default: mainnet)
+4. **Network** — `mainnet`, `sepolia`, or `hoodi`
+
+**Input collection rules before deploy:**
+- Ask the user for all four deploy inputs: release name, namespace, operator address, and network.
+- If release name is not provided, the agent may choose a sensible release default and confirm it.
+- If namespace is not provided, the agent may choose `dv-pod` (or an existing DVpod namespace) and confirm it.
+- **Do not invent or default** `operatorAddress`; it must come from the user.
+- **Do not invent or default** `network`; it must come from the user.
+- The operator address must be the same address the user will use to sign in Obol Launchpad.
 
 ### Optional but Important
 5. **Beacon node endpoint(s)** — URL(s) of beacon node(s). If not provided, the user will need to configure this later.
@@ -97,11 +118,12 @@ indefinitely without finding an invite — this is a common source of confusion.
 
 ### Deployment Scenarios
 
-**Scenario A: Fresh group cluster (most common)**
+**Scenario A: Fresh group cluster**
 - Auto-generates ENR
 - DKG sidecar polls Obol API waiting for cluster creation on Launchpad
 - User creates/joins cluster on the network-specific Launchpad after deploy
 - Each node must have the correct operator address matching its Launchpad registration
+- Ask the user for the real `charon.operatorAddress` before running Helm
 
 ```bash
 helm upgrade --install <release> obol/dv-pod \
@@ -152,7 +174,13 @@ helm upgrade --install <release> obol/dv-pod \
 After deploying, automatically:
 1. Wait for pods to be ready
 2. Retrieve and display the public ENR
-3. Show next steps (Launchpad URL, DKG monitoring)
+3. Show next steps:
+   - remind the user which operator address they deployed with
+   - give the correct Launchpad URL for the selected network
+   - tell them to sign with that same operator address in Launchpad
+4. Start DKG monitoring
+5. Validate beacon reachability from charon:
+   `kubectl exec -n <namespace> <pod> -c charon -- wget -qO- <beacon-url>/eth/v1/node/health`
 
 ## Action: status
 
@@ -320,7 +348,8 @@ kubectl delete secret charon-enr-private-key -n <namespace>
 
 - When the user's request doesn't match a specific action, use your knowledge of the chart to help.
 - Always check `helm list` and `kubectl get pods` first to understand existing state.
-- If the user provides a namespace, use it. If not, check for existing DVpod deployments or default to `dv-pod`.
+- If the user provides a namespace, use it. If not, check for existing DVpod deployments or default to `dv-pod` and confirm.
+- Require the user to explicitly provide `network` and `operatorAddress` before deployment.
 - When showing ENRs, format them clearly — they are long strings the user may need to copy.
 - For network selection, map friendly names: mainnet=1, sepolia=11155111, hoodi=560048.
 - The Obol Launchpad URLs are network-specific:
@@ -329,6 +358,13 @@ kubectl delete secret charon-enr-private-key -n <namespace>
   - **Sepolia:** https://sepolia.launchpad.obol.org
 - The Obol API endpoint is https://api.obol.tech
 - If the user mentions `$ARGUMENTS`, parse it to determine the action and any additional context.
+
+## Capabilities and Limits
+
+- This skill can deploy, upgrade, monitor, and troubleshoot `dv-pod` on Kubernetes.
+- This skill cannot perform Launchpad actions for the user (cluster creation, invite acceptance, operator signatures).
+- DKG completion depends on all external operator steps being completed on Launchpad.
+- Solo-flow DKG is not supported.
 
 ## Parsing $ARGUMENTS
 

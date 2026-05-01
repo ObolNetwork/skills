@@ -33,6 +33,13 @@ kubectl get secrets -n <ns> | grep -E "enr|charon"
 
 ## Common Issues
 
+### Interpreting Results Quickly
+
+- DKG sidecar polling is normal right after deploy; persistent polling usually means Launchpad/operator mismatch or pending signatures.
+- Missing `/charon-data/cluster-lock.json` means DKG has not completed yet.
+- Charon restart loops with beacon errors usually indicate bad/unreachable `charon.beaconNodeEndpoints`.
+- Healthy pods but no DKG progress usually means external coordination (other operators) is incomplete.
+
 ### Pod stuck in Pending
 
 **Symptoms:** Pod stays in `Pending` state.
@@ -140,6 +147,23 @@ done
   ```
 - **Invalid cluster-lock.json:** Check Charon logs for specific error messages.
 - **Port conflicts:** Ensure ports 3600, 3610, 3620 are not conflicting.
+
+### Local k3d/macOS Mount Error in dkg-sidecar
+
+**Symptoms:** Init container fails with an error similar to:
+`error mounting ... /charon-data/charon-enr-private-key ... mountpoint ... is outside of rootfs`.
+
+**Cause:** Environment-specific mount behavior when a secret subPath is mounted under a PVC path.
+
+**Testing workaround:** disable charon-data persistence for the test run:
+```bash
+helm upgrade <release> obol/dv-pod -n <ns> \
+  --reuse-values \
+  --set persistence.enabled=false
+```
+
+**Note:** This workaround is for test/dev only; data is not persisted across restarts.
+This chart-level mount-path issue is expected to be fixed soon.
 
 ### Validator Client Not Starting
 

@@ -23,20 +23,34 @@ from lib.grafana import (
 def categorise_cluster(name, size):
     """Categorise cluster by operator type."""
     n = name.lower()
-    if "curated" in n and "etherfi" in n: return "etherfi_curated"
-    if name.startswith("EtherFi:"): return "etherfi_curated"
-    if name.startswith("Pier Two x Etherfi"): return "etherfi_curated"
-    if "etherfi" in n: return "etherfi_solo"
-    if "stakely" in n and ("lido" in n or "obol" in n): return "lido_curated"
-    if "rocklogic" in n: return "lido_curated"
-    if "ebunker" in n: return "lido_curated"
-    if name == "?" and size == 4: return "lido_curated"
-    if "lido x obol" in n: return "lido_sdvt"
-    if "stakewise" in n: return "protocol_curated"
-    if "swell" in n: return "protocol_curated"
-    if "obol" in n and ("mainnet" in n or "eigensquad" in n): return "obol_internal"
-    if name == "Stakely Obol Portal": return "obol_internal"
-    if name == "?" or size <= 1: return "unknown"
+    if "curated" in n and "etherfi" in n:
+        return "etherfi_curated"
+    if name.startswith("EtherFi:"):
+        return "etherfi_curated"
+    if name.startswith("Pier Two x Etherfi"):
+        return "etherfi_curated"
+    if "etherfi" in n:
+        return "etherfi_solo"
+    if "stakely" in n and ("lido" in n or "obol" in n):
+        return "lido_curated"
+    if "rocklogic" in n:
+        return "lido_curated"
+    if "ebunker" in n:
+        return "lido_curated"
+    if name == "?" and size == 4:
+        return "lido_curated"
+    if "lido x obol" in n:
+        return "lido_sdvt"
+    if "stakewise" in n:
+        return "protocol_curated"
+    if "swell" in n:
+        return "protocol_curated"
+    if "obol" in n and ("mainnet" in n or "eigensquad" in n):
+        return "obol_internal"
+    if name == "Stakely Obol Portal":
+        return "obol_internal"
+    if name == "?" or size <= 1:
+        return "unknown"
     return "community"
 
 

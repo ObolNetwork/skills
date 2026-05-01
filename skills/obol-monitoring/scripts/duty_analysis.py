@@ -9,12 +9,11 @@ Outputs: JSON to stdout, progress to stderr.
 import argparse
 import json
 import os
-import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib.grafana import (
-    get_auth_headers, discover_datasources, prom_query, loki_query,
+    get_auth_headers, discover_datasources, loki_query,
     cluster_selector, slot_to_time, slot_to_timestamp,
     parse_embedded_ts, extract_logfmt, get_cluster_size,
 )
@@ -84,14 +83,22 @@ def main():
                         "level": level,
                         "msg": msg,
                     }
-                    if rnd: event["round"] = rnd
-                    if new_round: event["new_round"] = new_round
-                    if rule: event["rule"] = rule
-                    if timeout_reason: event["timeout_reason"] = timeout_reason
-                    if leader_name: event["leader_name"] = leader_name
-                    if leader_index: event["leader_index"] = leader_index
-                    if endpoint: event["endpoint"] = endpoint
-                    if rtt: event["rtt"] = rtt
+                    if rnd:
+                        event["round"] = rnd
+                    if new_round:
+                        event["new_round"] = new_round
+                    if rule:
+                        event["rule"] = rule
+                    if timeout_reason:
+                        event["timeout_reason"] = timeout_reason
+                    if leader_name:
+                        event["leader_name"] = leader_name
+                    if leader_index:
+                        event["leader_index"] = leader_index
+                    if endpoint:
+                        event["endpoint"] = endpoint
+                    if rtt:
+                        event["rtt"] = rtt
 
                     events.append(event)
 
