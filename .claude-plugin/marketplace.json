@@ -1,0 +1,15 @@
+{
+  "name": "obol",
+  "owner": {
+    "name": "Obol",
+    "email": "info@obol.tech",
+    "url": "https://obol.org"
+  },
+  "plugins": [
+    {
+      "name": "obol",
+      "source": ".",
+      "description": "Skills for running decentralised infrastructure and agents with Obol"
+    }
+  ]
+}
