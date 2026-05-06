@@ -1,6 +1,6 @@
 ---
 name: run-obol-stack
-description: Help a human install, boot, operate, and productise the Obol Stack — Obol's Kubernetes-based agent harness for running blockchain infrastructure locally, exposing services to the public internet, and charging for them via x402 micropayments. Use whenever a user mentions Obol Stack, Obol Agent, OpenClaw, x402 payments, agent commerce, ERC-8004, selling inference / APIs from agents, running a local Ethereum or L2 node under `obol network`, deploying a Dockerfile via `obol-app`, or bringing up a Cloudflare tunnel for an agent service. You are helping from OUTSIDE the Stack — the agents inside it have their own skills and take over once the user is at the dashboard.
+description: Help a human install, boot, operate, and productise the Obol Stack — Obol's Kubernetes-based agent harness for running blockchain infrastructure locally, exposing services to the public internet, and charging for them via x402 micropayments. Use whenever a user mentions Obol Stack, Obol Agent, Hermes, OpenClaw, x402 payments, agent commerce, ERC-8004, selling inference / APIs from agents, running a local Ethereum or L2 node under `obol network`, deploying a Dockerfile via `obol-app`, or bringing up a Cloudflare tunnel for an agent service. You are helping from OUTSIDE the Stack — the agents inside it have their own skills and take over once the user is at the dashboard.
 ---
 
 # Run the Obol Stack
@@ -36,8 +36,8 @@ Don't use this skill for:
 Four concepts the user needs, nothing more:
 
 1. **Cluster** — a local k3d Kubernetes cluster, brought up by `obol stack up`. All services run as pods.
-2. **Obol Agent** — the AI agent running inside the cluster. Gets its own Ethereum wallet (backed by a remote-signer), a bearer token for its gateway, and a pre-installed skill set. Today's default agent runtime is **OpenClaw**; other runtimes (Hermes, Claude Code where terms allow, etc.) are expected to land — prefer "Obol Agent" generically when explaining, and name the runtime only when a specific CLI verb requires it (e.g. `obol openclaw ...`).
-3. **x402** — HTTP 402 micropayments gateway. Any pod behind `/services/<name>/*` gets payment-gated via Traefik ForwardAuth. Pricing is in **OBOL token** where supported (Stack 0.9+); **USDC on Base / Base-Sepolia** is the underlying settlement rail.
+2. **Obol Agent** — the AI agent running inside the cluster. Gets its own Ethereum wallet (backed by a remote-signer), a bearer token for its gateway, and a pre-installed skill set. As of Stack 0.9, the default agent runtime is **Hermes** ([github.com/NousResearch/hermes](https://github.com/NousResearch/hermes)). OpenClaw is supported as an alternate runtime via `obol agent new --runtime openclaw`. Prefer "Obol Agent" generically when explaining, and name the runtime only when a specific CLI verb requires it (`obol hermes ...`, `obol openclaw ...`).
+3. **x402** — HTTP 402 micropayments gateway. Any pod behind `/services/<name>/*` gets payment-gated via Traefik ForwardAuth. Stack 0.9+ supports both **$OBOL on Ethereum mainnet** and **USDC on Base / Base-Sepolia / Ethereum / Polygon / Avalanche / Arbitrum**. Critical $OBOL property: when buyers pay in OBOL on mainnet, the Obol-operated facilitator (`x402.gcp.obol.tech`) batches an EIP-2612 permit with the on-chain transfer at settlement — **buyers never spend ETH on gas** and skip the one-time `approve(Permit2, max)` step. Sellers receive OBOL directly.
 4. **Tunnel** — Cloudflare quick tunnel that publishes `/services/<name>/*`, the `/skill.md` service catalogue, and `/.well-known/agent-registration.json` for ERC-8004 discovery. The frontend and eRPC routes are hostname-restricted to `obol.stack` and **must never** be exposed to the tunnel.
 
 ## Prerequisites (always check these first)
@@ -84,17 +84,23 @@ obol upgrade     # upgrade in-cluster components
 
 ```bash
 obol stack init                           # allocates a petname stack ID, writes ~/.config/obol/
-obol stack up                             # creates the k3d cluster, deploys infra, creates the default Obol Agent + wallet
-obol openclaw dashboard default           # opens the agent's web dashboard in the browser
+obol stack up                             # creates the k3d cluster, deploys infra, creates the default Hermes agent + wallet
+obol hermes chat                          # opens an interactive chat TUI against the default agent
 ```
 
 `stack up` is slow on first run — 2-5 min — and does a lot:
 - Creates the k3d cluster
-- Deploys Traefik + Cloudflared + LiteLLM + eRPC + Monitoring + x402 gateway + frontend
-- Creates a default Obol Agent instance (namespace `openclaw-default`) with an Ethereum signing wallet and 20+ embedded skills
-- Imports any local `~/.openclaw/` workspace if it exists
+- Deploys Traefik + Cloudflared + LiteLLM + eRPC + Monitoring + x402 verifier + ServiceOffer controller + frontend
+- Creates the default Hermes agent (namespace `hermes-obol-agent`) with an Ethereum signing wallet and an embedded skill set
+- Auto-configures LiteLLM with any host Ollama models it finds
 
-Crucially, **the default agent is created by `stack up` itself** — `obol agent init` is for creating **additional** agents beside the default, each with its own wallet and skill set. Don't tell users to run `obol agent init` immediately after `stack up` unless they want a second agent.
+Crucially, **the default agent is created by `stack up` itself**. `obol agent new` is for creating **additional** agents beside the default, each with its own wallet and skill set. Don't tell users to run `obol agent new` immediately after `stack up` unless they want a second agent.
+
+**Talking to the default agent:**
+- `obol hermes chat` — interactive chat TUI in the terminal (the most direct path to "is the agent alive and does it route to my LLM?")
+- `obol hermes setup` — interactive flow to wire up messaging integrations (Telegram, Discord, Slack, etc.) so the agent can ping the user out-of-band when long-running work finishes
+- `obol hermes skills list` — live skill catalogue
+- `obol hermes <anything>` is a passthrough to the in-cluster Hermes binary; `obol hermes --help` is the source of truth.
 
 After bring-up, sanity-check pods:
 
@@ -111,12 +117,13 @@ The top-level verbs. Use `obol <verb> --help` for full details rather than memor
 | Verb | What | When to reach for it |
 |------|------|---------------------|
 | `stack` | `init`, `up`, `down`, `purge` | Cluster lifecycle. `down` preserves config + data; `purge --force` wipes everything. |
-| `agent` | `init` | Spawn an **additional** Obol Agent beside the default. |
-| `openclaw` | `onboard`, `setup`, `sync`, `list`, `delete`, `dashboard`, `cli`, `token`, `skills` | OpenClaw-specific runtime ops. `token` prints the agent gateway bearer; `skills list/add/remove` manages the agent's skill catalogue; `dashboard` opens the web UI. |
+| `agent` | `init`, `new`, `setup`, `sync`, `auth`, `list`, `delete`, `wallet` | Manage agent instances. `init` (re)creates the stack-managed default; `new --runtime hermes\|openclaw` spawns an additional instance. |
+| `hermes` | passthrough to the native Hermes CLI inside the default agent pod | `chat`, `skills`, `config`, `setup` (messaging integrations), `dashboard`, etc. Default runtime as of Stack 0.9. |
+| `openclaw` | `onboard`, `setup`, `sync`, `list`, `delete`, `dashboard`, `cli`, `token`, `skills` | OpenClaw-specific runtime ops (alternate runtime). |
 | `network` | `list`, `install`, `add`, `remove`, `status`, `sync`, `delete` | Deploy a blockchain network (ethereum / aztec). Two-stage: `install` writes config, `sync` deploys. |
 | `app` | `install`, `sync`, `list`, `delete` | Deploy any Helm chart from Artifact Hub or your own Dockerfile via the `obol-app` chart. |
-| `sell` | `inference`, `http`, `demo`, `list`, `status`, `stop`, `delete`, `pricing`, `register` | Create payment-gated endpoints. `demo` is the canonical first-sale experience (0.9+). |
-| `model` | `setup`, `status` | Switch LiteLLM between Ollama / Anthropic / OpenAI. Patches the in-cluster secret + restarts LiteLLM + syncs agents. |
+| `sell` | `demo`, `inference`, `http`, `list`, `status`, `stop`, `delete`, `pricing`, `register` | Create payment-gated endpoints. **`demo` is the canonical first-sale experience (0.9+)** — start there with new users. |
+| `model` | `setup`, `status` | Switch LiteLLM between Ollama / Anthropic / OpenAI / custom OpenAI-compatible endpoints. Patches the in-cluster ConfigMap + restarts LiteLLM + syncs agents. |
 | `tunnel` | `status`, `login`, `provision`, `restart`, `logs` | Cloudflare tunnel for public exposure. |
 | `kubectl` / `helm` / `helmfile` / `k9s` | passthrough | Run the underlying tool with `KUBECONFIG` auto-set to the cluster. Prefer these over running the raw tools. |
 | `update` / `upgrade` | — | CLI + cluster components respectively. |
@@ -202,14 +209,21 @@ The sell-side is where the Stack differentiates — turning a pod into a billabl
 
 ### Canonical first sale — `obol sell demo`
 
-Starting in Stack 0.9, `obol sell demo` is the canonical first-time seller experience. It deploys a trivial HTTP service behind an x402 gate, publishes it to the tunnel, and gives the user a reproducible "here's what a paid endpoint looks like from both sides" demo. Use this when the user is new — it's faster than explaining theory.
+Starting in Stack 0.9, `obol sell demo` is the canonical first-time seller experience. It deploys a trivial HTTP service behind an x402 gate, registers it on the Cloudflare quick tunnel, waits for the offer to reach `Ready=True`, and prints copy-paste try-it instructions (curl + Python x402 SDK + agent prompt). Use this when the user is new — it's faster than explaining theory.
 
 ```bash
-obol sell demo                     # brings up the demo service, prints a URL and the buyer snippet
-obol sell status                   # see deployed offers
-obol sell stop <name>              # disable (keeps config)
-obol sell delete <name> --force    # remove
+obol sell demo                     # default: hello @ 1 OBOL/req on Ethereum mainnet (gas-sponsored buy)
+obol sell demo blocks              # 0.0001 USDC/req on base-sepolia (live chain data via eRPC)
+obol sell demo quant               # 0.01 USDC/req on base-sepolia (agent-driven analysis report)
+
+obol sell list                     # see deployed offers (alias: `obol sell status`)
+obol sell stop <name> -n <ns>      # disable (keeps config)
+obol sell delete <name> -n <ns>    # remove
 ```
+
+`obol sell demo` skips ERC-8004 on-chain registration by default — the demo wallet would need ETH for gas, and back-to-back demos would trigger `setMetadata` reverts on already-registered agents. Run `obol sell register --chain <chain>` later if/when on-chain discovery matters. Pass `--register` to `obol sell demo` to opt in.
+
+The framing for users: **`obol sell demo` is to the Obol Stack what "Hello World" is to a programming language.** Once they've watched a paid request settle end-to-end, the same machinery (`obol sell inference` / `obol sell http`) wraps anything in their cluster.
 
 ### Selling inference from the agent's LLM gateway
 
@@ -256,15 +270,20 @@ obol kubectl get serviceoffer -A                   # check status
 obol kubectl describe serviceoffer <name> -n x402  # see which stage is stuck
 ```
 
-### Pricing — OBOL token vs USDC on Base
+### Pricing — $OBOL on mainnet vs USDC
 
-Settlement rails across Stack versions:
+Token / chain support in Stack 0.9+:
 
-- **Stack 0.9+**: Native OBOL token pricing on supported chains. Prefer OBOL when quoting prices to users who are post-0.9.
-- **Stack pre-0.9 / underlying settlement**: USDC on Base / Base Sepolia. The x402 verifier validates ERC-3009 authorizations for USDC; OBOL layers on top.
-- **Testing locally without real chain ops**: x402-verifier runs in `verifyOnly: true` mode; `foundryup` lets the user fake-sign ERC-3009 auths for local smoke tests.
+| Token | Chain(s) | Settlement | Notes |
+|-------|----------|------------|-------|
+| **$OBOL** | `ethereum` (mainnet) | Permit2 + EIP-2612 with facilitator gas sponsorship | Buyers sign a permit off-chain; the Obol facilitator (`x402.gcp.obol.tech`) batches `permit()` with `transferFrom` at settlement. **Buyers spend zero gas**, never need ETH, skip the one-time approve. |
+| **USDC** | `base`, `base-sepolia`, `ethereum`, `polygon`, `polygon-amoy`, `avalanche`, `avalanche-fuji`, `arbitrum-one`, `arbitrum-sepolia` | EIP-3009 `transferWithAuthorization` | Standard x402 USDC flow. Facilitator pays the on-chain settlement gas. |
 
-When quoting a price to a user, name the unit (`0.01 OBOL / MTok` or `0.001 USDC / request`) explicitly. Don't write `$0.01` — the payment rail matters.
+**The OBOL-on-mainnet flow is the headline UX**: buyer signs an off-chain message, seller receives OBOL, neither party touches gas tokens. Lead with this when explaining "why pay in OBOL" — it's the most concretely better-than-card experience the Stack offers.
+
+When quoting prices, always name the unit explicitly (`0.01 OBOL / MTok`, `0.001 USDC / request`). Don't write `$0.01` — the payment rail matters.
+
+**Testing locally without real chain ops**: x402-verifier runs with `verifyOnly: true` for ForwardAuth; `foundryup` lets the user fake-sign EIP-3009 auths for local smoke tests.
 
 ### ERC-8004 agent registration
 
@@ -278,31 +297,48 @@ This signs a RegistrationRequest on-chain. The registered agent then appears in 
 
 ## Agent commerce (buy-side — handoff)
 
-The buy-side lives **inside** the agent pod. Specifically: `/data/.openclaw/skills/buy-inference/scripts/buy.py` (skill name `buy-inference`, invoked by the in-pod agent). Outside Claude's role:
+The buy-side lives **inside** the agent pod. The current skill name is `buy-x402` (formerly `buy-inference` / `buy`); the embedded scripts live under `${OBOL_SKILLS_DIR:-/data/.hermes/obol-skills}/buy-x402/scripts/buy.py` for Hermes (or `/data/.openclaw/skills/buy-x402/scripts/buy.py` for OpenClaw). Outside Claude's role:
 
-1. Walk the user to `obol openclaw dashboard default` and log in.
-2. Hand off — the Obol Agent inside the Stack knows how to use `buy-inference` to probe a remote 402 endpoint, pre-sign ERC-3009 authorisations, and route through the `x402-buyer` sidecar to spend them.
+1. Walk the user to `obol hermes chat` (or `obol openclaw dashboard <id>` for OpenClaw runtimes) and have them ask the agent to probe / pay an x402 endpoint.
+2. Hand off — the Obol Agent inside the Stack knows how to use `buy-x402` to probe a remote 402 endpoint, pre-sign ERC-3009 / Permit2 authorisations, and route through the `x402-buyer` sidecar to spend them.
 
-That's it. Don't try to have the outside Claude kubectl-exec into the pod and drive `buy.py` manually unless the user explicitly wants a dry-run for debugging.
+That's it. Don't have the outside Claude kubectl-exec into the pod and drive `buy.py` manually unless the user explicitly wants a dry-run for debugging.
 
 ## The Obol Agent
 
-**Default runtime today: OpenClaw.** Expect other runtimes to land — the Stack is agent-runtime-agnostic by design. Verbs like `obol openclaw ...` will eventually have generic / alternative forms; for now they're how you talk to the default agent.
+**Default runtime as of Stack 0.9: Hermes.** OpenClaw is supported as an alternate runtime via `obol agent new --runtime openclaw`. The Stack is agent-runtime-agnostic by design; talk in terms of "the Obol Agent" generically and only name the runtime when a CLI verb requires it.
 
 Per-agent:
-- Unique Ethereum signing wallet. Backup at `~/.config/obol/obol-wallet-backup-*.json`. **Back this up externally** — lose it and the agent's on-chain identity is gone.
-- A gateway bearer token: `obol openclaw token <instance>`.
-- An embedded skill set (covers cluster diag, Ethereum reads, local-wallet sending, DV monitoring, DeFi concepts, L2 routing, building-block patterns, security, indexing, orchestration, and more — exact list grows).
+- Unique Ethereum signing wallet, backed by a remote-signer Service in the same namespace. Back it up: `obol agent wallet backup -o ~/obol-wallet-backup.json --passphrase "..."`. **Back the export up externally** — losing it loses the agent's on-chain identity.
+- An API server bearer token: `obol agent auth [<instance>]` (regenerate with `--regenerate`).
+- An embedded skill set (covers cluster diag, Ethereum reads, local-wallet sending, DV monitoring, DeFi concepts, L2 routing, building-block patterns, security, indexing, orchestration, x402 buy/sell, and more — exact list grows).
 
 **Always have the user list skills fresh** rather than recite from memory:
 
 ```bash
-obol openclaw skills list <instance>    # live catalogue — trust this over anything this skill claims
-obol openclaw skills add <package>      # install a new skill
+# Hermes (default)
+obol hermes skills list                 # live catalogue
+obol hermes skills add <package>
+obol hermes skills remove <name>
+
+# OpenClaw (alternate)
+obol openclaw skills list <instance>
+obol openclaw skills add <package>
 obol openclaw skills remove <name>
 ```
 
-Skill packages come from the `ObolNetwork/skills` repo (global skills) and from openclaw's skill ecosystem. The agent is meant to grow — telling a user "your agent can do X" without checking the live catalogue will misroute them.
+Skill packages come from the [`ObolNetwork/skills`](https://github.com/ObolNetwork/skills) repo (global skills, also published as a Claude Code plugin — see "Adjacent Claude integration" below), the embedded skills shipped in the `obol` binary itself, and from each runtime's broader skill ecosystem. The agent is meant to grow — telling a user "your agent can do X" without checking the live catalogue will misroute them.
+
+### Adjacent Claude integration
+
+Stack 0.9 also ships a public Claude Code plugin at [`ObolNetwork/skills`](https://github.com/ObolNetwork/skills). If the user is on Claude Code, recommend installing it so future sessions get this very skill (`run-obol-stack`) plus the others (DV testing, fleet monitoring, etc.) without having to copy-paste files:
+
+```
+/plugin marketplace add ObolNetwork/skills
+/plugin install obol@obol
+```
+
+Reload plugins if needed (`/reload-plugins`). The plugin includes this skill, so once installed, future Claude sessions will pick it up on relevant prompts automatically.
 
 ## Debugging
 
@@ -347,7 +383,7 @@ This bites every new user the first time they try to `kubectl exec` into a pod a
 
 ## Handoff to the agent inside
 
-Once the user has the dashboard open and the agent is responsive, your role as outside-Claude is essentially done. The Obol Agent has its own embedded skills covering:
+Once the user has `obol hermes chat` open (or the agent's dashboard, depending on runtime) and the agent is responsive, your role as outside-Claude is essentially done. The Obol Agent has its own embedded skills covering:
 
 - Ethereum read-only queries (`cast`-style — blocks, balances, ERC-20, ENS)
 - Ethereum signing via the per-agent remote-signer
@@ -358,10 +394,10 @@ Once the user has the dashboard open and the agent is responsive, your role as o
 - Indexing (The Graph, Dune, custom)
 - Gas / security / MEV / reentrancy patterns
 
-**Have the user run `obol openclaw skills list <instance>` to see the live catalogue** instead of reciting it. The list evolves and running it fresh keeps the user on current reality.
+**Have the user run `obol hermes skills list` (or `obol openclaw skills list <instance>` for OpenClaw) to see the live catalogue** instead of reciting it. The list evolves and running it fresh keeps the user on current reality.
 
 Things to hand over to the inside agent rather than driving yourself:
-- Running `buy-inference` to pay a remote seller.
+- Running `buy-x402` to pay a remote seller.
 - Using the agent's wallet to sign any meaningful tx.
 - Querying indexes the agent built.
 - Any `cast` call against a chain the agent has synced.
@@ -370,17 +406,20 @@ Things to keep doing from outside:
 - Operating the Stack itself (`stack up/down`, `app install`, `sell ...`, `tunnel`).
 - Upgrading, debugging infra pods, version-drift resolution.
 - Setting up a second agent instance.
-- Explaining the Stack's mental model to a user before they're in the dashboard.
+- Explaining the Stack's mental model to a user before they're in the agent's chat.
 
 ## Related products + key docs
 
-- Stack repo + authoritative docs: [`ObolNetwork/obol-stack`](https://github.com/ObolNetwork/obol-stack), [`docs.obol.org/next/obol-stack/obol-stack`](https://docs.obol.org/next/obol-stack/obol-stack).
+- Stack repo + authoritative docs: [`ObolNetwork/obol-stack`](https://github.com/ObolNetwork/obol-stack), [docs.obol.org → Obol Stack](https://docs.obol.org/obol-stack/).
 - Stack getting-started (human-facing walkthrough): `ObolNetwork/obol-stack/docs/getting-started.md`.
 - Monetize inference guide: `ObolNetwork/obol-stack/docs/guides/monetize-inference.md`.
 - The `obol-app` chart: `ObolNetwork/helm-charts/charts/obol-app/` — read `values.yaml` for the full knob surface.
-- OpenClaw home: [openclaw.ai](https://openclaw.ai).
+- Obol Claude Code plugin (this skill + others): [`ObolNetwork/skills`](https://github.com/ObolNetwork/skills) — install with `/plugin marketplace add ObolNetwork/skills && /plugin install obol@obol`.
+- Hermes (default agent runtime): [`NousResearch/hermes`](https://github.com/NousResearch/hermes).
+- OpenClaw (alternate agent runtime): [openclaw.ai](https://openclaw.ai).
 - x402 protocol: [x402.org](https://www.x402.org/).
-- ERC-8004 reference: part of the Ethereum ERC process — search ERCs for the latest state.
+- ERC-8004 reference: [eips.ethereum.org/EIPS/eip-8004](https://eips.ethereum.org/EIPS/eip-8004).
+- $OBOL token: [docs.obol.org → OBOL token](https://docs.obol.org/community-and-governance/obol-token/).
 - Cloudflared quick tunnels: [Cloudflare Tunnel docs](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/).
 - Stack-internal dev skill (contributors only): `ObolNetwork/obol-stack/.claude/skills/obol-stack-dev/SKILL.md`.
 - DV operator paths (out of scope for this skill): `charon-distributed-validator-node`, `lido-charon-distributed-validator-node`, `helm-charts/charts/dv-pod`, plus the global `test-a-dv-cluster` and `obol-monitoring` skills.
