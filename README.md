@@ -9,7 +9,7 @@ A Claude Code plugin with skills for running decentralised infrastructure with O
 
 ```
 /plugin marketplace add ObolNetwork/skills
-/plugin install obol
+/plugin install obol@obol
 ```
 
 Reload plugins if needed:
