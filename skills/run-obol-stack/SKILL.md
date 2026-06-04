@@ -122,7 +122,8 @@ The top-level verbs. Use `obol <verb> --help` for full details rather than memor
 | `openclaw` | `onboard`, `setup`, `sync`, `list`, `delete`, `dashboard`, `cli`, `token`, `skills` | OpenClaw-specific runtime ops (alternate runtime). |
 | `network` | `list`, `install`, `add`, `remove`, `status`, `sync`, `delete` | Deploy a blockchain network (ethereum / aztec). Two-stage: `install` writes config, `sync` deploys. |
 | `app` | `install`, `sync`, `list`, `delete` | Deploy any Helm chart from Artifact Hub or your own Dockerfile via the `obol-app` chart. |
-| `sell` | `demo`, `inference`, `http`, `list`, `status`, `stop`, `delete`, `pricing`, `register` | Create payment-gated endpoints. **`demo` is the canonical first-sale experience (0.9+)** — start there with new users. |
+| `sell` | `demo`, `inference`, `http`, `agent`, `list`, `status`, `stop`, `delete`, `pricing`, `register` | Create payment-gated endpoints. **`demo` is the canonical first-sale experience (0.9+)** — start there with new users. `sell agent <name>` wraps an existing `Agent` CR as an OpenAI-compatible paid endpoint. |
+| `buy` | `inference` | Pre-pay a remote x402-gated **model** ("rent a brain" — for users with no local Ollama / no provider API key). Publishes `paid/<remote-model>` through LiteLLM and lets the in-pod `x402-buyer` sidecar spend one auth per call. Buying from another *agent* (specialised work, not raw completions) doesn't have a host-side wrapper — drive that from `obol hermes chat`. |
 | `model` | `setup`, `status` | Switch LiteLLM between Ollama / Anthropic / OpenAI / custom OpenAI-compatible endpoints. Patches the in-cluster ConfigMap + restarts LiteLLM + syncs agents. |
 | `tunnel` | `status`, `login`, `provision`, `restart`, `logs` | Cloudflare tunnel for public exposure. |
 | `kubectl` / `helm` / `helmfile` / `k9s` | passthrough | Run the underlying tool with `KUBECONFIG` auto-set to the cluster. Prefer these over running the raw tools. |
@@ -131,178 +132,57 @@ The top-level verbs. Use `obol <verb> --help` for full details rather than memor
 
 Always read `obol <verb> --help` fresh in a session — the help is the source of truth; this table rots.
 
-## Sync a blockchain network
+## Networks, apps, and the Cloudflare tunnel
 
-Two-stage model: **install** (save config) then **sync** (deploy).
+These three subsystems share a common shape (deploy → wire up → expose) and live together in [`references/networks-and-apps.md`](references/networks-and-apps.md). Load that file when the user is doing any of:
 
-```bash
-obol network list                                     # what's available
-obol network install ethereum --network=hoodi --id demo   # config only
-obol network sync ethereum/demo                       # deploys to the cluster
-```
+- Syncing a local Ethereum / Aztec node (`obol network install` then `obol network sync`).
+- Packaging their own Dockerfile via the `obol-app` Helm chart (`obol app install` then `obol app sync`).
+- Bringing up public exposure (`obol tunnel login` / `provision` / `status` / `restart` / `logs`).
 
-Networks available (verify with `obol network list` to avoid rot): **ethereum** (mainnet, sepolia, hoodi — don't use goerli / holesky / gnosis / chiado), **aztec**.
+**Three invariants to memorise even without loading the reference**:
 
-Ethereum install knobs:
-- `--network mainnet|sepolia|hoodi`
-- `--execution-client reth|geth|nethermind|besu|erigon|ethereumjs`
-- `--consensus-client lighthouse|prysm|teku|nimbus|lodestar|grandine`
+1. **Never expose the frontend (`/`) or eRPC (`/rpc`) routes through the tunnel.** They are hostname-restricted to `obol.stack` for a reason — the frontend has cluster-admin-like UI capabilities and eRPC is unauthenticated. Exposing either is a critical security flaw. If a user wants their RPC public, wrap it in an `obol-app` service with their own auth layer on a `/services/<name>/*` route instead.
+2. **Client diversity matters on mainnet.** If the user is syncing Ethereum mainnet, push them off the default EL/CL to a minority client (rationale is network-level, not just Stack-level).
+3. **If the user will read history, choose archive.** `obol network install ethereum --mode archive` is the right default for anyone planning to index events, run historical `eth_call`, or build an explorer — a pruned full node returns `state at block N is pruned` for those queries. Pair with `--since <preset|block|duration>` to bound the archive (e.g. `--since prague` ≈ 0.4 TB on mainnet) instead of paying for all 4 TB+ back to genesis. Reth-only today; full coverage in the reference.
 
-**Client diversity nudge**: same as CDVN — if the user is running mainnet, push them off the default EL/CL to something non-majority. Rationale is network-level (correlated client failures hurt Ethereum) not just Stack-level.
+## Agent commerce — the orientation
 
-Resulting endpoints (replace `{id}` with the deployment ID they chose):
-- Execution RPC: `http://obol.stack/ethereum-{id}/execution`
-- Beacon API: `http://obol.stack/ethereum-{id}/beacon`
-- Unified eRPC (load-balances across installed execution deployments): `http://obol.stack/rpc`
+The sell-side is where the Stack differentiates: turning a pod, an LLM, or a sub-agent into a billable service in one command. The buy-side closes the loop. Depth and recipes live in [`references/agent-commerce.md`](references/agent-commerce.md) — **load it** as soon as the conversation moves past "what is x402" into any concrete sell / buy work.
 
-From inside pods use the cluster-internal DNS instead (see [DNS gotcha](#dns-gotcha) below).
-
-## Deploy your own service (the `obol-app` chart)
-
-The Stack's general-purpose "run any Dockerfile as a managed app" mechanism is the `obol-app` Helm chart shipped in `ObolNetwork/helm-charts`. It's a generic pod+service+HTTPRoute wrapper — it's NOT DV-specific and shouldn't be confused with `dv-pod`.
-
-Two common patterns:
-
-**(a) Install an off-the-shelf Artifact Hub chart:**
-
-```bash
-obol app install bitnami/redis
-obol app install bitnami/postgresql@15.0.0          # pin a version
-obol app sync postgresql                            # deploy
-obol app list                                       # see what's installed
-obol app delete postgresql/eager-fox --force        # remove (petnames used for deployment IDs)
-```
-
-**(b) Ship your own Dockerfile:**
-
-1. Build + push the image to a registry the cluster can reach (Docker Hub / GHCR / a local registry).
-2. Write a `values.yaml` for `obol-app` — minimally `image.repository`, `image.tag`, ports to expose, env, resources. Schema is enforced via `values.schema.json` in the chart.
-3. Install via `obol app install obol/obol-app -f values.yaml` (or via `helmfile` for helmfile-managed persistence — see Stack's CLAUDE.md for the helmfile path).
-4. `obol app sync` to deploy.
-
-The chart's values surface is in `ObolNetwork/helm-charts/charts/obol-app/values.yaml`; read that file to see the full knob set before authoring a values file. Reference docs: `https://artifacthub.io/packages/helm/obol/obol-app`.
-
-Exposed inside the cluster as a Kubernetes Service. To make it public and/or billable, go through [Cloudflare tunnel](#public-exposure-via-cloudflare-tunnel) + [x402 sell-side](#agent-commerce-sell-side).
-
-## Public exposure via Cloudflare tunnel
-
-```bash
-obol tunnel login                  # authenticate against Cloudflare
-obol tunnel provision              # creates the tunnel
-obol tunnel status                 # prints public URL
-obol tunnel logs                   # tail cloudflared logs
-obol tunnel restart                # on change
-```
-
-The tunnel publishes **only** the public-safe routes:
-- `/services/<name>/*` — x402-gated user services
-- `/.well-known/agent-registration.json` — ERC-8004 agent registration
-- `/skill.md` — human/agent-readable catalogue of what this Stack is selling
-
-### Critical invariant — never relax route restrictions
-
-The frontend (`/`) and eRPC (`/rpc`) routes are **hostname-restricted to `obol.stack`** in the Traefik Gateway HTTPRoutes. They are meant to be local-only. **Never** remove the hostname restrictions to expose them publicly — the frontend has cluster-admin-like UI capabilities and eRPC is unauthenticated. Exposing either is a critical security flaw. If a user asks to "expose my local RPC through the tunnel", push them toward wrapping it in an `obol-app` service with their own auth layer on a `/services/<name>/*` route instead.
-
-## Agent commerce (sell-side)
-
-The sell-side is where the Stack differentiates — turning a pod into a billable service in one command.
-
-### Canonical first sale — `obol sell demo`
-
-Starting in Stack 0.9, `obol sell demo` is the canonical first-time seller experience. It deploys a trivial HTTP service behind an x402 gate, registers it on the Cloudflare quick tunnel, waits for the offer to reach `Ready=True`, and prints copy-paste try-it instructions (curl + Python x402 SDK + agent prompt). Use this when the user is new — it's faster than explaining theory.
+### First-sale starting point
 
 ```bash
 obol sell demo                     # default: hello @ 1 OBOL/req on Ethereum mainnet (gas-sponsored buy)
 obol sell demo blocks              # 0.0001 USDC/req on base-sepolia (live chain data via eRPC)
 obol sell demo quant               # 0.01 USDC/req on base-sepolia (agent-driven analysis report)
-
-obol sell list                     # see deployed offers (alias: `obol sell status`)
-obol sell stop <name> -n <ns>      # disable (keeps config)
-obol sell delete <name> -n <ns>    # remove
 ```
 
-`obol sell demo` skips ERC-8004 on-chain registration by default — the demo wallet would need ETH for gas, and back-to-back demos would trigger `setMetadata` reverts on already-registered agents. Run `obol sell register --chain <chain>` later if/when on-chain discovery matters. Pass `--register` to `obol sell demo` to opt in.
+`obol sell demo` is to the Obol Stack what "Hello World" is to a programming language — start there with new users. Once a paid request settles end-to-end, the same machinery wraps anything else.
 
-The framing for users: **`obol sell demo` is to the Obol Stack what "Hello World" is to a programming language.** Once they've watched a paid request settle end-to-end, the same machinery (`obol sell inference` / `obol sell http`) wraps anything in their cluster.
+### Pick the right `sell` shape
 
-### Selling inference from the agent's LLM gateway
+- `obol sell inference` — monetise raw LLM completions from your cluster's LiteLLM.
+- `obol sell http` — monetise any pod's HTTP endpoint (index, API, dashboard).
+- `obol sell agent` — monetise a *running agent's* replies (skills + memory + curated reference data, not just tokens). **The margin-bearing path** — the iteration playbook for SOUL.md / skills / reference data lives in the reference file; load it before guiding a user through this.
 
-```bash
-obol sell inference my-model --model qwen3.5:35b --price 0.01 --per-mtok
-obol sell pricing --wallet --chain base-sepolia
-```
+### Pick the right `buy` path
 
-This publishes the agent's LiteLLM inference behind x402. Buyers discover it via the tunnel's `/skill.md` or ERC-8004 registration.
+Inference vs. agent purchases solve different problems — don't conflate them:
 
-### Selling an arbitrary HTTP upstream
+- **Inference = renting a brain.** For users with no local Ollama / no provider API key, or who want a hosted model they don't otherwise have access to. Use `obol buy inference` host-side.
+- **Agent = renting specialised work.** Pay another agent to do a task (analysis, trading, monitoring, posting). Drive from `obol hermes chat` — no host-side wrapper today. This is also where the marketplace dynamic lives.
 
-```bash
-obol sell http my-service \
-  --wallet <addr> \
-  --chain base \
-  --price 0.001 --per-request \
-  --upstream http://my-service.my-ns.svc.cluster.local \
-  --port 8080 \
-  --namespace my-ns \
-  --health-path /healthz
-```
+### Defaults to apply session-wide
 
-Any pod in the cluster that exposes a Service can be wrapped. Common pattern:
-1. Deploy the upstream via `obol app install` + `obol app sync`.
-2. Wrap it with `obol sell http`.
-3. Announce via `obol sell register --name my-service --private-key-file <file>` (publishes to ERC-8004).
+- Quote examples in **OBOL on Ethereum mainnet** (headline gasless UX) or **USDC on Base** (cheap real money). Reach for `base-sepolia` only for dev / smoke tests, and label it as such.
+- Recommend `"stream": true` on all OpenAI-compatible paid endpoints. The Cloudflare quick tunnel has a ~100s idle timeout that drops buffered (non-streaming) responses to slow agents before they arrive.
+- When quoting prices, name the unit explicitly (`0.01 OBOL / MTok`, `0.001 USDC / request`). Never write `$0.01` — the payment rail matters.
 
-### ServiceOffer lifecycle (what happens under the hood)
+### Two invariants worth memorising
 
-When the user runs `obol sell http`, the serviceoffer-controller reconciles a `ServiceOffer` CR through stages:
-
-1. `ModelReady` — the upstream's model (if inference) is resolvable.
-2. `UpstreamHealthy` — upstream passes the health check.
-3. `PaymentGateReady` — x402 Traefik Middleware is attached.
-4. `RoutePublished` — HTTPRoute is live at `/services/<name>/*`.
-5. `Registered` — RegistrationRequest reconciled; optional ERC-8004 side effects.
-6. `Ready` — buyers can now pay and consume.
-
-Surface this progression to the user when troubleshooting a stuck offer:
-
-```bash
-obol kubectl get serviceoffer -A                   # check status
-obol kubectl describe serviceoffer <name> -n x402  # see which stage is stuck
-```
-
-### Pricing — $OBOL on mainnet vs USDC
-
-Token / chain support in Stack 0.9+:
-
-| Token | Chain(s) | Settlement | Notes |
-|-------|----------|------------|-------|
-| **$OBOL** | `ethereum` (mainnet) | Permit2 + EIP-2612 with facilitator gas sponsorship | Buyers sign a permit off-chain; the Obol facilitator (`x402.gcp.obol.tech`) batches `permit()` with `transferFrom` at settlement. **Buyers spend zero gas**, never need ETH, skip the one-time approve. |
-| **USDC** | `base`, `base-sepolia`, `ethereum`, `polygon`, `polygon-amoy`, `avalanche`, `avalanche-fuji`, `arbitrum-one`, `arbitrum-sepolia` | EIP-3009 `transferWithAuthorization` | Standard x402 USDC flow. Facilitator pays the on-chain settlement gas. |
-
-**The OBOL-on-mainnet flow is the headline UX**: buyer signs an off-chain message, seller receives OBOL, neither party touches gas tokens. Lead with this when explaining "why pay in OBOL" — it's the most concretely better-than-card experience the Stack offers.
-
-When quoting prices, always name the unit explicitly (`0.01 OBOL / MTok`, `0.001 USDC / request`). Don't write `$0.01` — the payment rail matters.
-
-**Testing locally without real chain ops**: x402-verifier runs with `verifyOnly: true` for ForwardAuth; `foundryup` lets the user fake-sign EIP-3009 auths for local smoke tests.
-
-### ERC-8004 agent registration
-
-Publish the agent's wallet + service catalogue to an ERC-8004 registry:
-
-```bash
-obol sell register --name <service> --private-key-file <path>
-```
-
-This signs a RegistrationRequest on-chain. The registered agent then appears in any ERC-8004-compatible discovery tool. **Don't recommend a specific marketplace URL to the user** — the agent-registry / marketplace ecosystem is evolving rapidly; let the user pick the registry they want and just make sure their agent is registered so they can be found.
-
-## Agent commerce (buy-side — handoff)
-
-The buy-side lives **inside** the agent pod. The current skill name is `buy-x402` (formerly `buy-inference` / `buy`); the embedded scripts live under `${OBOL_SKILLS_DIR:-/data/.hermes/obol-skills}/buy-x402/scripts/buy.py` for Hermes (or `/data/.openclaw/skills/buy-x402/scripts/buy.py` for OpenClaw). Outside Claude's role:
-
-1. Walk the user to `obol hermes chat` (or `obol openclaw dashboard <id>` for OpenClaw runtimes) and have them ask the agent to probe / pay an x402 endpoint.
-2. Hand off — the Obol Agent inside the Stack knows how to use `buy-x402` to probe a remote 402 endpoint, pre-sign ERC-3009 / Permit2 authorisations, and route through the `x402-buyer` sidecar to spend them.
-
-That's it. Don't have the outside Claude kubectl-exec into the pod and drive `buy.py` manually unless the user explicitly wants a dry-run for debugging.
+- **Don't recommend a specific marketplace URL.** The agent-registry ecosystem is evolving; register via `obol sell register --name <s> --private-key-file <f>` and let the user pick the registry.
+- **`x402.gcp.obol.tech` is the default facilitator** for OBOL mainnet + the USDC chains the Stack supports. Buyers paying OBOL on mainnet **never spend ETH on gas** — the facilitator batches the permit with the transfer at settlement. Lead with this when explaining "why pay in OBOL".
 
 ## The Obol Agent
 
@@ -360,7 +240,7 @@ Common failure modes:
 - **Pods `CrashLoopBackOff` after bring-up**: almost always means a bind-mount or secret didn't materialise. `obol kubectl describe` the failing pod — look at events.
 - **Can't reach `http://obol.stack/`**: local DNS isn't resolving. Check `/etc/hosts` or your OS DNS resolver — the installer wires `obol.stack` to `127.0.0.1`. On macOS, sometimes needs a restart of `mDNSResponder`.
 - **LiteLLM returns empty responses**: host Ollama isn't reachable from the cluster. Test with `obol kubectl run -n llm ollama-test --rm -it --image=curlimages/curl -- curl -s http://ollama.llm.svc.cluster.local:11434/api/tags`.
-- **ServiceOffer stuck**: go through the stage list in [ServiceOffer lifecycle](#serviceoffer-lifecycle-what-happens-under-the-hood) — each stage has a distinct root cause.
+- **ServiceOffer stuck**: walk the ServiceOffer lifecycle (`ModelReady → UpstreamHealthy → PaymentGateReady → RoutePublished → Registered → Ready`) — each stage has a distinct root cause. See the "ServiceOffer lifecycle" section in [`references/agent-commerce.md`](references/agent-commerce.md) for the full breakdown.
 
 ### DNS gotcha
 
@@ -397,19 +277,25 @@ Once the user has `obol hermes chat` open (or the agent's dashboard, depending o
 **Have the user run `obol hermes skills list` (or `obol openclaw skills list <instance>` for OpenClaw) to see the live catalogue** instead of reciting it. The list evolves and running it fresh keeps the user on current reality.
 
 Things to hand over to the inside agent rather than driving yourself:
-- Running `buy-x402` to pay a remote seller.
+- Buying from another **agent** for specialised work, and any exploratory `buy-x402` interactions (probe-then-decide, one-shot HTTP `pay`).
 - Using the agent's wallet to sign any meaningful tx.
 - Querying indexes the agent built.
 - Any `cast` call against a chain the agent has synced.
 
 Things to keep doing from outside:
 - Operating the Stack itself (`stack up/down`, `app install`, `sell ...`, `tunnel`).
+- `obol buy inference` for stable pre-paid **model** purchases — the "rent a brain" path for users without local Ollama or a provider API key. Publishes `paid/<model>` through LiteLLM (host-side wrapper around the in-pod `buy-x402` skill).
 - Upgrading, debugging infra pods, version-drift resolution.
 - Setting up a second agent instance.
 - Explaining the Stack's mental model to a user before they're in the agent's chat.
 
 ## Related products + key docs
 
+Skill-internal references (load these when their topic comes up):
+- [`references/agent-commerce.md`](references/agent-commerce.md) — full sell-side + buy-side: every `obol sell` shape, the SOUL.md / skills / reference-data iteration playbook for `sell agent`, ServiceOffer lifecycle, OBOL vs. USDC token table, ERC-8004 registration, and both `buy` paths.
+- [`references/networks-and-apps.md`](references/networks-and-apps.md) — `obol network` (Ethereum + Aztec sync), `obol-app` chart for deploying arbitrary Dockerfiles, `obol tunnel` for public exposure.
+
+External docs:
 - Stack repo + authoritative docs: [`ObolNetwork/obol-stack`](https://github.com/ObolNetwork/obol-stack), [docs.obol.org → Obol Stack](https://docs.obol.org/obol-stack/).
 - Stack getting-started (human-facing walkthrough): `ObolNetwork/obol-stack/docs/getting-started.md`.
 - Monetize inference guide: `ObolNetwork/obol-stack/docs/guides/monetize-inference.md`.
