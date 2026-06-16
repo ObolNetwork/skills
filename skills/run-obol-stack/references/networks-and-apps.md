@@ -103,13 +103,18 @@ Exposed inside the cluster as a Kubernetes Service. To make it public and/or bil
 
 ## Public exposure via Cloudflare tunnel
 
+`obol stack up` brings up a **temporary** quick tunnel automatically — its `https://<id>.trycloudflare.com` URL rotates on every restart, which is fine for local testing but breaks any bookmarked/registered URL. For a **permanent** URL, run `obol tunnel setup` with a Cloudflare **connector token**:
+
 ```bash
-obol tunnel login                  # authenticate against Cloudflare
-obol tunnel provision              # creates the tunnel
-obol tunnel status                 # prints public URL
+# In the Cloudflare dashboard: Networks → Tunnels → Create a tunnel, then add a
+# Public Hostname routing your hostname → http://traefik.traefik.svc.cluster.local:80
+obol tunnel setup --hostname stack.example.com <connector-token>   # paste the token (or the whole `cloudflared tunnel run --token …` line)
+obol tunnel status                 # prints public URL + connector health
 obol tunnel logs                   # tail cloudflared logs
 obol tunnel restart                # on change
 ```
+
+The connector token is a least-privilege, single-tunnel credential — **not** an account-wide API key. Steer users here once they're ready to sell. (Advanced: `obol tunnel setup --management local` / `obol tunnel login` uses a browser login on the host instead, which needs `cloudflared` installed.)
 
 The tunnel publishes **only** the public-safe routes:
 
