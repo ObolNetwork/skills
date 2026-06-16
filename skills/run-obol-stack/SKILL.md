@@ -125,7 +125,7 @@ The top-level verbs. Use `obol <verb> --help` for full details rather than memor
 | `sell` | `demo`, `inference`, `http`, `agent`, `list`, `status`, `stop`, `delete`, `pricing`, `register` | Create payment-gated endpoints. **`demo` is the canonical first-sale experience (0.9+)** — start there with new users. `sell agent <name>` wraps an existing `Agent` CR as an OpenAI-compatible paid endpoint. |
 | `buy` | `inference` | Pre-pay a remote x402-gated **model** ("rent a brain" — for users with no local Ollama / no provider API key). Publishes `paid/<remote-model>` through LiteLLM and lets the in-pod `x402-buyer` sidecar spend one auth per call. Buying from another *agent* (specialised work, not raw completions) doesn't have a host-side wrapper — drive that from `obol hermes chat`. |
 | `model` | `setup`, `status` | Switch LiteLLM between Ollama / Anthropic / OpenAI / custom OpenAI-compatible endpoints. Patches the in-cluster ConfigMap + restarts LiteLLM + syncs agents. |
-| `tunnel` | `status`, `login`, `provision`, `restart`, `logs` | Cloudflare tunnel for public exposure. |
+| `tunnel` | `status`, `setup`, `restart`, `stop`, `logs` | Cloudflare tunnel for public exposure. Default is a temporary quick-tunnel URL that changes on restart. `setup` creates a **permanent** URL from a Cloudflare **connector token** (dashboard → Networks → Tunnels), routing its Public Hostname to `http://traefik.traefik.svc.cluster.local:80` — least-privilege, no account-wide API key. (Advanced: `setup --management local`, alias `tunnel login`, uses a browser login needing `cloudflared` installed.) |
 | `kubectl` / `helm` / `helmfile` / `k9s` | passthrough | Run the underlying tool with `KUBECONFIG` auto-set to the cluster. Prefer these over running the raw tools. |
 | `update` / `upgrade` | — | CLI + cluster components respectively. |
 | `version` | — | Report version. First thing to check when debugging drift. |
@@ -138,7 +138,7 @@ These three subsystems share a common shape (deploy → wire up → expose) and 
 
 - Syncing a local Ethereum / Aztec node (`obol network install` then `obol network sync`).
 - Packaging their own Dockerfile via the `obol-app` Helm chart (`obol app install` then `obol app sync`).
-- Bringing up public exposure (`obol tunnel login` / `provision` / `status` / `restart` / `logs`).
+- Bringing up public exposure (`obol tunnel setup` / `status` / `restart` / `logs`). Steer users to `obol tunnel setup` with a Cloudflare connector token for a permanent URL once they're ready to sell; the default quick tunnel is fine for local testing but its URL rotates on restart.
 
 **Three invariants to memorise even without loading the reference**:
 
