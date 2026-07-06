@@ -1,11 +1,11 @@
 ---
 name: run-obol-stack
-description: Help a human install, boot, operate, and productise the Obol Stack — Obol's Kubernetes-based agent harness for running blockchain infrastructure locally, exposing services to the public internet, and charging for them via x402 micropayments. Use whenever a user mentions Obol Stack, Obol Agent, Hermes, OpenClaw, x402 payments, agent commerce, ERC-8004, selling inference / APIs from agents, running a local Ethereum or L2 node under `obol network`, deploying a Dockerfile via `obol-app`, or bringing up a Cloudflare tunnel for an agent service. You are helping from OUTSIDE the Stack — the agents inside it have their own skills and take over once the user is at the dashboard.
+description: Help a human install, boot, operate, and productise the Obol Stack — Obol's Kubernetes-based agent harness for running blockchain infrastructure locally, exposing services to the public internet, and charging for them via x402 micropayments. The flagship outcome is a paid sub-agent business — a specialised agent so packed with alpha that strangers pay per turn. Use whenever a user mentions Obol Stack, Obol Agent, Hermes, OpenClaw, x402 payments, agent commerce, ERC-8004, selling inference / APIs / an agent's replies, building an agent people will pay for, storefront branding, running a local Ethereum or L2 node under `obol network`, deploying a Dockerfile via `obol-app`, or bringing up a Cloudflare tunnel / custom domain for an agent service. You are helping from OUTSIDE the Stack — the agents inside it have their own skills and take over once the user is at the dashboard.
 ---
 
 # Run the Obol Stack
 
-The Obol Stack is a local-first agent harness: a k3d Kubernetes cluster, a default Obol Agent with an Ethereum wallet, a free rate-limited RPC (eRPC), the ability to sync real blockchain networks (Ethereum + L2s, Aztec), a Cloudflare tunnel for public exposure, and an x402 payment gateway so agents can charge for what they serve. The niche is **Ethereum-native agent commerce** — an agent syncs chains, builds an index or a service, and sells queries priced in OBOL (or USDC on Base while OBOL support rolls out) to other agents and humans discovering each other via ERC-8004 registries.
+The Obol Stack is a local-first agent harness: a k3d Kubernetes cluster, a default Obol Agent with an Ethereum wallet, a free rate-limited RPC (eRPC), the ability to sync real blockchain networks (Ethereum + L2s, Aztec), a Cloudflare tunnel for public exposure, and an x402 payment gateway so agents can charge for what they serve. The niche is **Ethereum-native agent commerce**, and the flagship outcome is a **paid sub-agent business**: the user builds specialised agents whose replies bundle alpha a buyer can't prompt out of a stock model — private indexes from a synced chain, curated verified data, expensive workflows — and sells turns of them priced in OBOL on mainnet (gasless for buyers) or USDC on Base, with buyers and sellers discovering each other via ERC-8004 registries.
 
 **This skill is for the Claude sitting at the user's terminal**, helping them install + operate + productise the Stack. Once the user lands in the Obol Agent's dashboard, control passes to the agent inside the Stack, which has its own skill set. Your job ends at "the agent is live and billable."
 
@@ -21,7 +21,8 @@ Match on any of:
 - User wants to deploy their own Dockerfile on the Stack and expose it (`obol app install`, `obol-app` helm chart).
 - User wants to sync a local Ethereum / L2 / Aztec node and use it (`obol network install`, `obol network sync`).
 - User wants to expose an agent service on the internet with a tunnel (`obol tunnel`).
-- User wants to **charge** for an agent service — inference, HTTP API, RPC, indexed data (`obol sell ...`, ERC-8004 registration, x402).
+- User wants to **charge** for an agent service — inference, HTTP API, RPC, indexed data, or a whole specialised agent's replies (`obol sell ...`, ERC-8004 registration, x402).
+- User wants to **build an agent business** — "an agent people will pay for", productising a sub-agent, storefront branding (`obol sell info`), buying a domain (`obol domain`).
 - User mentions "OpenClaw", "Obol Agent", "8004", "agent registration", "agent commerce", "payment-gated endpoint", "local inference + tunnel".
 - User is running the `obol sell demo` flow (lands in 0.9+) and wants help paying for / interpreting the demo skill.
 
@@ -116,15 +117,16 @@ The top-level verbs. Use `obol <verb> --help` for full details rather than memor
 
 | Verb | What | When to reach for it |
 |------|------|---------------------|
-| `stack` | `init`, `up`, `down`, `purge` | Cluster lifecycle. `down` preserves config + data; `purge --force` wipes everything. |
+| `stack` | `init`, `up`, `down`, `purge`, `export`, `import` | Cluster lifecycle. `down` preserves config + data; `purge --force` wipes everything (it offers a full `export` first). `export`/`import` = full backup archive (config, agent brains, encrypted wallets, CRs) — recommend an `export` before anything destructive. |
 | `agent` | `init`, `new`, `setup`, `sync`, `auth`, `list`, `delete`, `wallet` | Manage agent instances. `init` (re)creates the stack-managed default; `new --runtime hermes\|openclaw` spawns an additional instance. |
 | `hermes` | passthrough to the native Hermes CLI inside the default agent pod | `chat`, `skills`, `config`, `setup` (messaging integrations), `dashboard`, etc. Default runtime as of Stack 0.9. |
 | `openclaw` | `onboard`, `setup`, `sync`, `list`, `delete`, `dashboard`, `cli`, `token`, `skills` | OpenClaw-specific runtime ops (alternate runtime). |
 | `network` | `list`, `install`, `add`, `remove`, `status`, `sync`, `delete` | Deploy a blockchain network (ethereum / aztec). Two-stage: `install` writes config, `sync` deploys. |
 | `app` | `install`, `sync`, `list`, `delete` | Deploy any Helm chart from Artifact Hub or your own Dockerfile via the `obol-app` chart. |
-| `sell` | `demo`, `inference`, `http`, `agent`, `list`, `status`, `stop`, `delete`, `pricing`, `register` | Create payment-gated endpoints. **`demo` is the canonical first-sale experience (0.9+)** — start there with new users. `sell agent <name>` wraps an existing `Agent` CR as an OpenAI-compatible paid endpoint. |
-| `buy` | `inference` | Pre-pay a remote x402-gated **model** ("rent a brain" — for users with no local Ollama / no provider API key). Publishes `paid/<remote-model>` through LiteLLM and lets the in-pod `x402-buyer` sidecar spend one auth per call. Buying from another *agent* (specialised work, not raw completions) doesn't have a host-side wrapper — drive that from `obol hermes chat`. |
-| `model` | `setup`, `status` | Switch LiteLLM between Ollama / Anthropic / OpenAI / custom OpenAI-compatible endpoints. Patches the in-cluster ConfigMap + restarts LiteLLM + syncs agents. |
+| `sell` | `demo`, `inference`, `http`, `agent`, `mcp`, `list`, `status`, `test`, `update`, `stop`, `delete`, `resume`, `pricing`, `register`, `identity`, `info` | Create and run payment-gated endpoints. **`demo` is the canonical first-sale experience (0.9+)** — start there with new users. `sell agent <name>` wraps an `Agent` CR as an OpenAI-compatible paid endpoint (the margin-bearing path). `sell info` / `sell info set` = storefront branding + buyer's-eye catalogue view. `sell resume` replays all offers after a host reboot (`--install-boot-unit` for systemd); `obol stack up` does the same automatically. `sell mcp` = foreground x402-paid MCP server (not persisted). |
+| `buy` | `inference [<seller-url>]` | Pre-pay a remote x402-gated **model** ("rent a brain"). Walks the seller's `/api/services.json` catalogue, resolves model + token, prompts for count with a cost preview, pre-signs auths via the agent's remote signer, and publishes `paid/<remote-model>` through LiteLLM. `--agent X` pays from X's wallet and switches only X to the paid model; `--set-default` promotes it globally; `--auto-refill` + `--cost-cap` bound agent-managed top-ups. Buying from another *agent* (specialised work, not raw completions) doesn't have a host-side wrapper — drive that from `obol hermes chat`. |
+| `model` | `setup` (+ `setup custom`), `status`, `list`, `pull`, `prefer`, `sync`, `discover`, `remove`, `token` | LiteLLM roster management: BYOK cloud providers (`setup --provider openrouter\|anthropic\|openai\|venice... --api-key ...`), custom OpenAI-compatible endpoints (`setup custom --endpoint ... --model ...`), Ollama pulls, and head-of-list preference (`prefer` + `sync` — the first chat-capable entry is the agents' default). |
+| `domain` | `list`, `search`, `check`, `register` | Optional Cloudflare Registrar wrapper for buying a real domain for the storefront (needs a scoped Cloudflare API token; `register` is billable). On success it hands off to `obol tunnel setup --hostname ...`. |
 | `tunnel` | `status`, `setup`, `restart`, `stop`, `logs` | Cloudflare tunnel for public exposure. Default is a temporary quick-tunnel URL that changes on restart. `setup` creates a **permanent** URL from a Cloudflare **connector token** (dashboard → Networks → Tunnels), routing its Public Hostname to `http://traefik.traefik.svc.cluster.local:80` — least-privilege, no account-wide API key. (Advanced: `setup --management local`, alias `tunnel login`, uses a browser login needing `cloudflared` installed.) |
 | `kubectl` / `helm` / `helmfile` / `k9s` | passthrough | Run the underlying tool with `KUBECONFIG` auto-set to the cluster. Prefer these over running the raw tools. |
 | `update` / `upgrade` | — | CLI + cluster components respectively. |
@@ -165,6 +167,24 @@ obol sell demo quant               # 0.01 USDC/req on base-sepolia (agent-driven
 - `obol sell inference` — monetise raw LLM completions from your cluster's LiteLLM.
 - `obol sell http` — monetise any pod's HTTP endpoint (index, API, dashboard).
 - `obol sell agent` — monetise a *running agent's* replies (skills + memory + curated reference data, not just tokens). **The margin-bearing path** — the iteration playbook for SOUL.md / skills / reference data lives in the reference file; load it before guiding a user through this.
+
+### The flagship journey: a paid sub-agent business
+
+When a user's ambition is "an agent people pay for" (rather than a one-off endpoint), drive this loop — it is the highest-margin path the Stack offers and the reference file has the full playbook:
+
+```
+NICHE → SCOUT → PACK ALPHA → BUILD → EVALUATE → PRICE → SELL → MEASURE → ITERATE or KILL
+```
+
+1. **Niche + scout** — one agent, one job. Probe comparable x402 services for live pricing before building.
+2. **Pack alpha** — the edge lives in files, not weights: a synced chain + index, curated `references/` data, a sharpened SOUL.md. If the honest answer to *"why wouldn't the buyer just ask their own model?"* is silence, don't list it.
+3. **Build** — `obol agent new <name> --model <m> --skills <a,b> --objective "..." --create-wallet`.
+4. **Evaluate** — the gate most people skip: ask the agent the 10 hardest questions a paying buyer would ask, compare against a raw-model baseline, list only on a clear win. Details in the reference.
+5. **Price + sell** — `obol sell agent <name> --price ... --token OBOL|USDC --chain ethereum|base`.
+6. **Storefront** — `obol tunnel setup` for a permanent URL (optionally `obol domain register` for a real domain), `obol sell info set --display-name ... --tagline ... --logo-url ...` for branding, `obol sell register --chain` for ERC-8004 discovery.
+7. **Measure + iterate** — revenue is the payTo wallet's on-chain balance; refresh alpha on a cadence; kill offers that don't sell within ~30 days and reuse the parts.
+
+The agent *inside* the Stack ships with a `sub-agent-business` skill covering this same loop from in-cluster — once the user is in `obol hermes chat`, their agent can scout, build children via its agent-factory, and evaluate them itself. Your job from outside is the host-side half: tunnel, domain, branding, registration signing, and honest quality judgment.
 
 ### Pick the right `buy` path
 
