@@ -43,8 +43,10 @@ Defaults for examples: **OBOL on Ethereum mainnet** (headline gasless UX) or **U
 
 ```bash
 obol sell inference my-model --model qwen3.5:35b --price 10 --per-mtok --token OBOL --chain ethereum
-obol sell pricing --wallet --chain ethereum --token OBOL
+obol sell pricing --pay-to <addr> --chain ethereum --token OBOL
 ```
+
+(`--pay-to` is the canonical recipient flag everywhere in `obol sell`; `--wallet` still works as a deprecated alias.)
 
 Publishes the agent's LiteLLM inference behind x402. Buyers discover it via the tunnel's `/skill.md` or ERC-8004 registration.
 
@@ -52,7 +54,7 @@ Publishes the agent's LiteLLM inference behind x402. Buyers discover it via the 
 
 ```bash
 obol sell http my-service \
-  --wallet <addr> \
+  --pay-to <addr> \
   --chain base \
   --price 0.001 --per-request \
   --upstream http://my-service.my-ns.svc.cluster.local \
@@ -111,6 +113,21 @@ obol kubectl rollout restart deployment/hermes -n agent-<name>
 
 **Margin framing for the user**: a buyer pays you because your agent embodies operator knowledge (curated skills + reference data + sharpened SOUL) that they don't have. Without that, you're competing on raw LLM price and you'll lose to whoever's selling inference cheapest. The iteration loop above is what turns a generic Hermes shell into something worth its price.
 
+#### The business loop (run every agent idea through it)
+
+```
+NICHE → SCOUT → PACK ALPHA → BUILD → EVALUATE → PRICE → SELL → MEASURE → ITERATE or KILL
+```
+
+- **Niche**: one agent, one job. "Crypto assistant" is not a niche; "liquidation-risk monitor for Aave positions on Base" is.
+- **Scout**: probe comparable services' 402s for live pricing before building. A crowded niche at high prices means demand exists; an empty niche is a graveyard until proven otherwise.
+- **Evaluate — the gate**: before listing, write the 10 hardest questions a paying buyer in the niche would ask. Ask the sub-agent all 10, then answer them with a raw model (no niche skills) as baseline. List only if the sub-agent clearly wins ≥ 7 of 10. Keep the question set as a file and re-run after every change — it is the agent's regression test, and skipping it is the #1 way to ship an agent nobody buys twice.
+- **Price the answer, not the tokens**: fact lookups backed by your data 0.001–0.01 USDC; analysis turns 0.01–0.10; workflows that save the buyer real money 0.10–5.00. Anchor against scouted competitors; 2× their price is fine if the eval gap shows, 10× cheaper than everyone signals junk.
+- **Measure**: revenue is the payTo wallet's on-chain balance — give each offer its own payTo for per-agent attribution and snapshot weekly.
+- **Iterate or kill**: steady sales → refresh alpha on a cadence, then test a price raise. No sales in ~30 days → `obol sell delete` the offer, keep the agent, reuse its parts in the next attempt. Killing fast is what lets the user test many niches; a dozen half-alive offers is worse than one great one — curation IS the storefront.
+
+The agent inside the Stack ships with a matching `sub-agent-business` skill, so once the user is in `obol hermes chat` their agent can run this loop itself (scouting via its `discovery`/`buy-x402` skills, building children via `agent-factory`). Host-side, you own the honest quality judgment plus the pieces the in-cluster agent can't reach: tunnel, domain, `sell info` branding, and `sell register` signing.
+
 #### Streaming is the preferred mode
 
 The agent endpoint speaks the OpenAI Chat Completions protocol, including `stream: true` → Server-Sent Events. Both modes work, but **prefer streaming whenever the consumer supports it** for two real reasons:
@@ -162,15 +179,36 @@ When quoting prices, always name the unit explicitly (`0.01 OBOL / MTok`, `0.001
 
 **Testing locally without real chain ops**: x402-verifier runs with `verifyOnly: true` for ForwardAuth; `foundryup` lets the user fake-sign EIP-3009 auths for local smoke tests.
 
-### ERC-8004 agent registration
+### Storefront branding — `obol sell info`
 
-Publish the agent's wallet + service catalogue to an ERC-8004 registry:
+The tunnel hostname serves a public storefront landing page plus a machine-readable catalogue at `/api/services.json` (and `/skill.md`). Branding is operator-set:
 
 ```bash
-obol sell register --name <service> --private-key-file <path>
+obol sell info                       # buyer's-eye view: branding + every on-sale service
+obol sell info <name>                # focus one service + how-to-buy (add --verbose for health)
+obol sell info set --display-name "Acme Labs" --tagline "Paid APIs." --logo-url "https://…"
+obol sell info reset                 # back to defaults (or reset individual fields via flags)
 ```
 
-This signs a RegistrationRequest on-chain. The registered agent then appears in any ERC-8004-compatible discovery tool. **Don't recommend a specific marketplace URL to the user** — the agent-registry / marketplace ecosystem is evolving rapidly; let the user pick the registry they want and just make sure their agent is registered so they can be found.
+`sell info` shows what buyers see (only operationally-ready offers); operator health and conditions (including draining/not-ready offers) live under `obol sell status`. Run `sell info` with the user after any change — it's the fastest "would I buy from this storefront?" check.
+
+### Surviving restarts — `obol sell resume`
+
+Sell offers are persisted and replayed: `obol stack up` re-publishes every offer automatically after a reboot, and `obol sell resume` does the same on demand. On Linux, `obol sell resume --install-boot-unit` installs a systemd user unit so offers come back without anyone at the keyboard. (`obol sell mcp` is the exception — foreground-only, no offer, not resumed.)
+
+### `obol sell mcp` — paid MCP tools
+
+`obol sell mcp [name]` runs a foreground x402-paid MCP server that forwards buyer JSON args to a backend HTTP service, injecting the **seller's own API key** so the buyer never sees it. Payment rides MCP `_meta`. Use it to resell metered access to an upstream API as an MCP tool; remember it's foreground-only and not persisted.
+
+### ERC-8004 agent registration
+
+Registration is **enabled by default** on `obol sell inference|http|agent` — each offer gets a RegistrationRequest, and the controller publishes `/.well-known/agent-registration.json` on the tunnel. Shape it with `--register-name`, `--description`, `--register-skills` (OASF tags), `--register-domains`, `--register-metadata`; opt out with `--no-register`. The **on-chain** identity mint is a separate operator action:
+
+```bash
+obol sell register --chain <mainnet|base|base-sepolia> [--name <s>]
+```
+
+The controller watches the chain selected by the offer's payment network for the matching registration tx — it never submits transactions itself. **Don't recommend a specific marketplace URL to the user** — the agent-registry / marketplace ecosystem is evolving rapidly; let the user pick the registry they want and just make sure their agent is registered so they can be found.
 
 ## Buy-side
 
@@ -188,15 +226,12 @@ Mental model: **inference is the substrate, agents are the product.** A user wit
 **Inference (pre-paid model budget) — `obol buy inference`:**
 
 ```bash
-obol buy inference my-buy \
-  --seller https://seller.example/services/aeon \
-  --model aeon \
-  --budget 0.10 \
-  --token USDC \
-  --expected-agent-id 42        # or --no-verify-identity in dev
+obol buy inference https://seller.example/          # interactive: walks the catalogue, previews cost, confirms
+obol buy inference https://seller.example/ --agent research   # pay from agent `research`'s wallet AND switch only it to the paid model
+obol buy inference https://seller.example/ --set-default      # promote the paid model globally + sync every agent
 ```
 
-What happens: probes the seller's 402, verifies the ERC-8004 registration (unless skipped), dispatches to the in-pod `buy-x402` skill to pre-sign N authorisations, creates a `PurchaseRequest`, and publishes `paid/<remote-model>` through LiteLLM. After it returns, the user can call the model from any OpenAI-compatible client pointed at the cluster's LiteLLM — and **call it with `stream: true`** for the same tunnel-idle-timeout reasons as the sell side.
+The seller URL is positional (omit it to use the default storefront). The command walks the seller's `/api/services.json` catalogue, auto-resolves the model and payment token from the offer, and on a TTY prompts through: auto-top-up Y/N → request count with a cost preview → final confirm. It then pre-signs authorisations via the buying agent's remote signer, creates a `PurchaseRequest`, and publishes `paid/<remote-model>` through LiteLLM (the in-pod `x402-buyer` sidecar spends one auth per call — bounded spend by construction). Useful flags: `--model` (only needed when the seller lists several), `--count`/`--budget` (non-interactive sizing), `--auto-refill` with `--refill-threshold`/`--refill-count` (agent-managed top-ups), `--cost-cap` (refuse refills if the seller hikes the per-request price above this ceiling), `--expected-agent-id` (opt-in ERC-8004 identity check — default skips verification). After it returns, the user can call the model from any OpenAI-compatible client pointed at the cluster's LiteLLM — and **call it with `stream: true`** for the same tunnel-idle-timeout reasons as the sell side.
 
 **Agent services and ad-hoc HTTP — agent-driven via `obol hermes chat` → `buy-x402`:** there is no `obol buy agent` host-side wrapper today. Buying from another agent (or paying a one-shot HTTP service) is best done from inside the agent's chat — it knows how to probe the 402, pick the right token, sign, send the actual request, and interpret the reply. The skill lives at `${OBOL_SKILLS_DIR:-/data/.hermes/obol-skills}/buy-x402/scripts/buy.py` (`buy.py pay <url>` for one-shots; `buy.py buy <name> ...` for inference-shaped budgets).
 
