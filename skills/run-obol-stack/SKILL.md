@@ -23,6 +23,7 @@ Match on any of:
 - User wants to expose an agent service on the internet with a tunnel (`obol tunnel`).
 - User wants to **charge** for an agent service — inference, HTTP API, RPC, indexed data, or a whole specialised agent's replies (`obol sell ...`, ERC-8004 registration, x402).
 - User wants to **build an agent business** — "an agent people will pay for", productising a sub-agent, storefront branding (`obol sell info`), buying a domain (`obol domain`).
+- User wants to **brainstorm what to build or sell** on the Stack — workshopping business ideas or use cases, "what could I do with this", "is my idea any good", pricing a concept — even before installing anything (see [Workshop the business idea](#workshop-the-business-idea-pre-install-and-post-install)).
 - User mentions "OpenClaw", "Obol Agent", "8004", "agent registration", "agent commerce", "payment-gated endpoint", "local inference + tunnel".
 - User is running the `obol sell demo` flow (lands in 0.9+) and wants help paying for / interpreting the demo skill.
 
@@ -40,6 +41,23 @@ Four concepts the user needs, nothing more:
 2. **Obol Agent** — the AI agent running inside the cluster. Gets its own Ethereum wallet (backed by a remote-signer), a bearer token for its gateway, and a pre-installed skill set. As of Stack 0.9, the default agent runtime is **Hermes** ([github.com/NousResearch/hermes](https://github.com/NousResearch/hermes)). OpenClaw is supported as an alternate runtime via `obol agent new --runtime openclaw`. Prefer "Obol Agent" generically when explaining, and name the runtime only when a specific CLI verb requires it (`obol hermes ...`, `obol openclaw ...`).
 3. **x402** — HTTP 402 micropayments gateway. Any pod behind `/services/<name>/*` gets payment-gated via Traefik ForwardAuth. Stack 0.9+ supports both **$OBOL on Ethereum mainnet** and **USDC on Base / Base-Sepolia / Ethereum / Polygon / Avalanche / Arbitrum**. Critical $OBOL property: when buyers pay in OBOL on mainnet, the Obol-operated facilitator (`x402.gcp.obol.tech`) batches an EIP-2612 permit with the on-chain transfer at settlement — **buyers never spend ETH on gas** and skip the one-time `approve(Permit2, max)` step. Sellers receive OBOL directly.
 4. **Tunnel** — Cloudflare quick tunnel that publishes `/services/<name>/*`, the `/skill.md` service catalogue, and `/.well-known/agent-registration.json` for ERC-8004 discovery. The frontend and eRPC routes are hostname-restricted to `obol.stack` and **must never** be exposed to the tunnel.
+
+## Workshop the business idea (pre-install and post-install)
+
+Ideation is not a one-shot step gated behind a working cluster — it's a **loop you can run with the user before they install anything and keep running after they're live.** The most valuable thing you can do for many users is help them find a business worth building *before* they spend an hour syncing a node for a service nobody will pay for.
+
+**Pre-install (no cluster required):** You can workshop the whole concept from a cold terminal. Nothing about brainstorming needs Docker, a node, or a wallet. Steer the conversation with:
+
+- **What's your edge?** The Stack's whole premise is *alpha the buyer can't prompt out of a stock model*. Probe for what the user actually knows or can access that a generic model can't: a niche they trade in, a dataset they can curate, a chain they'll index, a workflow they've refined. If the honest answer to *"why wouldn't the buyer just ask their own model?"* is silence, keep digging before recommending an install.
+- **Which `sell` shape fits?** Map the idea to raw inference (`sell inference`), a data/API endpoint (`sell http`), or a specialised agent (`sell agent` — the margin-bearing path). This tells you what they'll actually need to install (e.g. an archive node for an indexing play, just LiteLLM for an inference reseller).
+- **Who pays, and how much?** Sketch the buyer and a rough per-turn price in OBOL or USDC. Compare against comparable x402 services if any are known. A believable revenue story de-risks the install.
+- **What does that imply for setup?** Only *after* the idea has legs, translate it into the concrete prerequisites and bring-up path below. This keeps the user from over-provisioning (e.g. a 4TB archive node) for an idea that hasn't been pressure-tested.
+
+Good pre-install output is a one-line pitch, the `sell` shape, a price guess, and the minimal install footprint — not a running cluster.
+
+**Post-install (the tighter loop):** Once the Stack is up, ideation becomes empirical and continuous. Fold the user into the flagship `NICHE → SCOUT → PACK ALPHA → BUILD → EVALUATE → PRICE → SELL → MEASURE → ITERATE or KILL` loop below, and keep cycling: evaluate against a raw-model baseline, ship, watch the payTo wallet balance, then either sharpen the alpha or kill the offer and reuse the parts. Encourage running **several small experiments** rather than betting everything on one agent — the marginal cost of a second `obol sell` offer is low, and the market teaches faster than speculation. Re-open the "what's your edge?" question every iteration; the answer sharpens as real buyers (or their absence) give feedback.
+
+The agent inside the Stack ships a `sub-agent-business` skill that runs this same loop from in-cluster once the user is in `obol hermes chat` — so the loop doesn't stop when your outside-Claude role ends; it hands off.
 
 ## Prerequisites (always check these first)
 
