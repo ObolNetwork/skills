@@ -181,16 +181,29 @@ When quoting prices, always name the unit explicitly (`0.01 OBOL / MTok`, `0.001
 
 ### Storefront branding — `obol sell info`
 
-The tunnel hostname serves a public storefront landing page plus a machine-readable catalogue at `/api/services.json` (and `/skill.md`). Branding is operator-set:
+The tunnel hostname serves a public storefront landing page plus a machine-readable catalogue at `/api/services.json` (and `/skill.md`). Branding is operator-set and applies to every buyer-facing surface — storefront, 402 paywall pages, wallet sign-in, `/api` docs, per-offer landing pages:
 
 ```bash
 obol sell info                       # buyer's-eye view: branding + every on-sale service
 obol sell info <name>                # focus one service + how-to-buy (add --verbose for health)
-obol sell info set --display-name "Acme Labs" --tagline "Paid APIs." --logo-url "https://…"
+obol sell info set \
+  --display-name "One Dollar Audit" \
+  --tagline "A serious security audit. One dollar." \
+  --logo-file ./logo.png \
+  --theme obol \
+  --description 'Ships as a **signed report** — findings ranked by severity.'
 obol sell info reset                 # back to defaults (or reset individual fields via flags)
 ```
 
-`sell info` shows what buyers see (only operationally-ready offers); operator health and conditions (including draining/not-ready offers) live under `obol sell status`. Run `sell info` with the user after any change — it's the fastest "would I buy from this storefront?" check.
+The full knob set (all optional, all patch-only):
+
+- `--theme light|dark|obol` — built-in presets (`light` default); `--accent '#hex'` recolors any of them.
+- `--logo-file` / `--favicon-file` / `--og-image-file` — inline local images as data: URIs (no hosting, no CORS pain); the OG image drives link previews.
+- `--description '<markdown>'` — longer seller copy; safe markdown subset (bold, lists, links, small headings) rendered on the storefront and paywall pages.
+- `--css-file custom.css` — capped custom stylesheet injected after the theme; target the stable `data-obol="…"` attributes (e.g. `[data-obol="price"]`). This is the styling API — write CSS against these hooks, not against class names.
+- `--hostname <host> …` — per-origin override for an offer bound to its own hostname (each product gets its own identity; unset fields inherit the storefront's). `--contact-email` stays storefront-wide.
+
+`sell info` shows what buyers see (only operationally-ready offers); operator health and conditions (including draining/not-ready offers) live under `obol sell status`. Run `sell info` with the user after any change — it's the fastest "would I buy from this storefront?" check. For a visual check, open the tunnel URL in a browser, and curl a paid route with `Accept: text/html` to see the branded 402 checkout page.
 
 ### Surviving restarts — `obol sell resume`
 
