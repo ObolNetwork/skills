@@ -199,7 +199,7 @@ NICHE → SCOUT → PACK ALPHA → BUILD → EVALUATE → PRICE → SELL → MEA
 3. **Build** — `obol agent new <name> --model <m> --skills <a,b> --objective "..." --create-wallet`.
 4. **Evaluate** — the gate most people skip: ask the agent the 10 hardest questions a paying buyer would ask, compare against a raw-model baseline, list only on a clear win. Details in the reference.
 5. **Price + sell** — `obol sell agent <name> --price ... --token OBOL|USDC --chain ethereum|base`.
-6. **Storefront** — `obol tunnel setup` for a permanent URL (optionally `obol domain register` for a real domain), `obol sell info set --display-name ... --tagline ... --logo-url ...` for branding, `obol sell register --chain` for ERC-8004 discovery.
+6. **Storefront** — `obol tunnel setup` for a permanent URL (optionally `obol domain register` for a real domain), `obol sell info set --display-name ... --tagline ... --logo-file ... --theme light|dark|obol --description '<markdown>'` for branding (applies to the storefront AND the 402 paywall pages; see the agent-commerce reference for the full knob set incl. `--accent`, `--css-file`, per-hostname overrides), `obol sell register --chain` for ERC-8004 discovery.
 7. **Measure + iterate** — revenue is the payTo wallet's on-chain balance; refresh alpha on a cadence; kill offers that don't sell within ~30 days and reuse the parts.
 
 The agent *inside* the Stack ships with a `sub-agent-business` skill covering this same loop from in-cluster — once the user is in `obol hermes chat`, their agent can scout, build children via its agent-factory, and evaluate them itself. Your job from outside is the host-side half: tunnel, domain, branding, registration signing, and honest quality judgment.
