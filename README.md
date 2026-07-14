@@ -7,6 +7,8 @@ A Claude Code plugin with skills for running decentralised infrastructure with O
 
 ### As a Claude Code Plugin (Recommended)
 
+**From inside the Claude Code REPL:**
+
 ```
 /plugin marketplace add ObolNetwork/skills
 /plugin install obol@obol
@@ -16,6 +18,15 @@ Reload plugins if needed:
 ```
 /reload-plugins
 ```
+
+**From your terminal (without starting the REPL):**
+
+```bash
+claude plugin marketplace add ObolNetwork/skills
+claude plugin install obol@obol
+```
+
+The plugin is installed for your user by default. Use `--scope project` or `--scope local` to install it only for the current project.
 
 ### Manual Installation
 
