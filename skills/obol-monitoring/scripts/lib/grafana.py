@@ -60,16 +60,22 @@ def discover_datasources(headers):
     if not datasources:
         return None, None
 
-    prom_id = None
-    loki_id = None
-    for ds in datasources:
-        if ds.get("type") == "prometheus" and ds.get("name") == "prometheus":
-            prom_id = ds.get("id")
-        if ds.get("type") == "loki" and ds.get("name") == "Loki":
-            loki_id = ds.get("id")
+    # Proxy by UID: numeric-id proxy routes 404 on this Grafana version. The metrics
+    # live in the datasource named obol-prometheus-ds; the one named "prometheus"
+    # (id 1) exists but does not serve the fleet metrics.
+    def pick(ds_type, preferred_names):
+        candidates = [ds for ds in datasources if ds.get("type") == ds_type and ds.get("uid")]
+        for name in preferred_names:
+            for ds in candidates:
+                if ds.get("name") == name:
+                    return ds.get("uid")
+        return candidates[0].get("uid") if candidates else None
 
-    prom_url = f"{GRAFANA_BASE}/api/datasources/proxy/{prom_id}/api/v1/" if prom_id else None
-    loki_url = f"{GRAFANA_BASE}/api/datasources/proxy/{loki_id}/loki/api/v1/" if loki_id else None
+    prom_uid = pick("prometheus", ["obol-prometheus-ds", "prometheus"])
+    loki_uid = pick("loki", ["Loki"])
+
+    prom_url = f"{GRAFANA_BASE}/api/datasources/proxy/uid/{prom_uid}/api/v1/" if prom_uid else None
+    loki_url = f"{GRAFANA_BASE}/api/datasources/proxy/uid/{loki_uid}/loki/api/v1/" if loki_uid else None
     return prom_url, loki_url
 
 

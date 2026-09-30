@@ -219,18 +219,27 @@ If the issue is intermittent or slot-specific, use `duty_analysis.py` for a spec
 - `core_consensus_timeout_total{duty="...",timer="..."}` — Consensus failures (the duty timed out entirely)
 - `core_consensus_decided_rounds{duty="..."}` — Rounds needed to decide (1 is ideal)
 - `core_consensus_duration_seconds{duty="..."}` — Time to reach consensus
+- `core_consensus_insufficient_round_changes_total{protocol,duty,timer,outcome}` — Instances with too few round-change messages, by outcome (decided/timeout). Elevated values point at asymmetric connectivity or slow minority peers.
 - Timer type `eager_dlinear` = EagerDoubleLinear (default). Round N budget = N seconds from duty start time.
 
-### Beacon Node Performance
+### Beacon Node Performance & Identity
 - `app_eth2_latency_seconds{endpoint="..."}` — BN API latency. Key: `attestation_data` (should be <50ms for Lighthouse, ~170ms for Teku)
-- `app_beacon_node_peers` — BN's own peer count. <50 is concerning.
-- `app_beacon_node_version{version="..."}` — BN software version.
+- `app_beacon_node_peers` — BN's own peer count. <50 is concerning. **Gotcha**: with multiple configured BNs this gauge can flip between instances; do not correlate its time series across charon peers to detect shared BNs (peer-capped BNs also sit at identical values by coincidence).
+- `app_beacon_node_version{version,beacon_id}` — BN software version **and `beacon_id`, the BN's libp2p peer ID — the definitive per-instance identity**. Multiple series per `cluster_peer` = that node has multiple BN endpoints configured.
+  - To answer "do these charon nodes share beacon nodes?": `group by (beacon_id, cluster_peer, version) (present_over_time(app_beacon_node_version{cluster_name="X"}[24h]))`, then invert to beacon_id → peers. A beacon_id under >1 cluster_peer is a genuinely shared instance. Identical `version` strings only prove same *build*, never same instance.
+- `app_beacon_node_sse_head_delay{addr}` — Histogram, slot start → head event delay per BN (`addr` labels the BN endpoint). The go-to for late-block/late-head diagnosis.
+- `app_beacon_node_sse_block{addr}` / `app_beacon_node_sse_block_gossip{addr}` — Block import / gossip-arrival delay histograms; values under the attestation due offset (4s pre-gloas, 3s post-gloas) are safe.
+- `app_beacon_node_sse_block_processing_time{addr}` — gossip→head gap, isolates BN compute (CPU/disk) from network arrival.
+- `app_beacon_node_sse_chain_reorg_depth{addr}`, `app_beacon_node_sse_head_slot{addr}` — reorg and head tracking per BN.
 - `app_eth2_errors_total{endpoint="..."}` — BN API errors by endpoint.
 
 ### P2P Connectivity
 - `p2p_ping_latency_secs{peer="..."}` — Latency per peer. <100ms good, >500ms problematic.
 - `p2p_ping_success{peer="..."}` — 1=connected, 0=not. Best proxy for live connectivity.
 - `p2p_peer_connection_types{peer="...",type="...",protocol="..."}` — `direct` (good) or `relay` (higher latency).
+- `p2p_send_duration_seconds{peer,protocol,topic}` — Wall-clock send/round-trip duration per sub-protocol topic (e.g. `qbft_pre_prepare`, `parsigex_proposer`); much finer-grained than ping for locating consensus-path latency.
+- `p2p_handler_duration_seconds{protocol}` / `p2p_inflight_requests` / `p2p_concurrent_requests` — inbound handling time and backlog (inflight ≈ message rate × handler duration).
+- `p2p_message_read_errors_total{protocol,peer}` — read failures incl. messages exceeding protocol size limits; `p2p_sent/received_message_size_bytes` for the size distributions.
 
 ### Versions & Configuration
 - `app_version{version="..."}` — Charon version per peer.
@@ -239,6 +248,15 @@ If the issue is intermittent or slot-specific, use `duty_analysis.py` for a spec
 - `cluster_threshold` — Minimum signatures needed.
 - `cluster_validators` — Number of validators in cluster.
 - `app_feature_flags{feature_flags="..."}` — Custom-enabled features. **Absence does NOT mean feature is off** — stable features (EagerDoubleLinear, ConsensusParticipate, ProposalTimeout, FetchOnlyCommIdx0) are on by default without this metric.
+- `app_peerinfo_dv_client{peer,dv_client}` — Peer's DV client type (charon vs others).
+- `app_fork_readiness{fork,component,status,address}` — Per-fork readiness (ready / restart_required / upgrade_required / unknown) per component; `address` set for per-BN rows. First stop for hard-fork triage.
+- `app_fork_network_epoch{fork}` / `app_fork_applied_epoch{fork}` — Scheduled vs applied fork epochs; a mismatch means charon needs a restart/upgrade before the fork.
+
+### Builder Configuration (gloas era)
+- `app_builder_config_url{url}` / `app_builder_config_min_bid_gwei` / `app_builder_config_boost_factor_percent` / `app_builder_config_max_execution_payment_gwei` — This node's builder flags; absent when no builder URLs configured.
+- `app_peerinfo_builder_config_mismatch{peer}` — 1 if the peer's builder configuration hash differs from this node's. Divergent configs produce divergent, non-aggregatable builder duties — any 1 here needs operator alignment.
+- `core_validatorapi_proposer_preferences_mismatch_total{field}` — VC-submitted proposer preferences mismatching the cluster-lock value, by field (e.g. fee recipient). Non-zero = a VC is misconfigured relative to the cluster.
+- `core_tracker_parsig_cohort_rank_total{duty,peer_idx,rank}` — Sync-committee partial signatures per peer per cohort rank (0 = largest cohort). A peer persistently outside rank 0 disagrees with the cluster on head — an early head-split signal.
 
 ### Balance
 - `core_scheduler_validator_balance_gwei{pubkey="...",pubkey_full="..."}` — Per-validator balance in gwei.
@@ -304,6 +322,10 @@ If the issue is intermittent or slot-specific, use `duty_analysis.py` for a spec
 6. **`not_included_onchain`**: Investigate — check broadcast delay metrics and BN connectivity.
 7. **Balance deduplication**: All peers report the same validator balances. Sum pubkeys from one peer only.
 8. **Loki timestamps**: Use embedded `ts=` field, not Loki receipt timestamp (can skew 1-2s).
+9. **BN topology questions ("do nodes share beacon nodes?")**: Use `beacon_id` on `app_beacon_node_version` — it is the BN's libp2p peer ID, the only per-instance identity. Same version string = same build, NOT same instance (fleets standardize releases). Correlating `app_beacon_node_peers` series across peers is a trap: the gauge flips between a node's multiple BNs, and peer-capped BNs (e.g. two Nimbus at max-peers=80) sit at identical values by coincidence. Multiple `app_beacon_node_version` series under one `cluster_peer` = multiple configured BN endpoints, which is healthy, not an anomaly — all `--beacon-node-endpoints` are raced primaries (fork-join, first success); `--fallback-beacon-node-endpoints` is a separate list used only on timeout/syncing/unreachable.
+10. **Per-addr SSE aggregation trap**: `app_beacon_node_sse_*` metrics are per BN endpoint (`addr`). Summing buckets across `addr` per node blends all of a node's BNs and is dominated by its slowest one — a "node is slow" panel signal is often one laggard BN out of three. Report per-addr, plus `min by (cluster_peer)` as the effective duty path (primaries are raced). Diagnosis split per addr: high `sse_block_gossip` slow% = network arrival (connectivity/peer count); gossip fine but `sse_block` slow or `sse_block_processing_time` high = BN compute; gossip and proc p50s fine but slow-import% high = spiky processing tail (host contention). Fleet-wide mainnet baseline for calibration: ~35% of BN block observations exceed 4s, so single-digit slow% per best-BN is top-decile.
+11. **Racing picks fastest, not freshest**: a laggard BN that hasn't imported the block still answers `attestation_data` fast — with the parent as head — and wins the race. Laggard BNs therefore hurt head-vote correctness even when duty success rates look perfect. Suspect them when head efficiency lags while participation is clean.
+12. **Naming in reports**: refer to nodes by their **nickname** (operator-set, e.g. `fle-charon-02`) rather than the auto-generated pet-name peer label (`frank-sound`) or ENR/peer IDs — nicknames are what operators recognize. Give both on first mention (`fle-charon-02 (frank-sound)`), then nickname. Likewise identify beacon nodes by **client pair** (e.g. "the Nimbus+Nethermind box") over raw IPs/URIs where the mapping is known. Caveat: `app_beacon_node_version` and `app_execution_layer_version` carry no `addr` label, so per-address client attribution is inference (site/subnet, peer-cap fingerprints), not ground truth — say so when it matters.
 
 ## External References
 
