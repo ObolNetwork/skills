@@ -1,5 +1,6 @@
 {
   "name": "obol",
+  "description": "Skills for running decentralised infrastructure and agents with Obol",
   "owner": {
     "name": "Obol",
     "email": "info@obol.tech",
@@ -8,10 +9,7 @@
   "plugins": [
     {
       "name": "obol",
-      "source": {
-        "source": "github",
-        "repo": "ObolNetwork/skills"
-      },
+      "source": "./",
       "description": "Skills for running decentralised infrastructure and agents with Obol"
     }
   ]
