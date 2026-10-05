@@ -85,7 +85,7 @@ but say "No invite found" for all of them.
   ```bash
   helm get values <release> -n <ns> | grep operatorAddress
   ```
-  Fix: `helm upgrade <release> obol/dv-pod -n <ns> --reuse-values --set charon.operatorAddress=<correct-address>`
+  Fix: `helm upgrade <release> obol/dv-pod -n <ns> --version <current-chart-version> --reuse-values --set charon.operatorAddress=<correct-address>`
   then restart the pod: `kubectl delete pod <pod> -n <ns>`
 - **Cluster not fully confirmed:** ALL operators must accept/sign on the Launchpad before the
   sidecar will detect the invite. Check the Launchpad cluster page to see which operators are pending.
@@ -106,7 +106,7 @@ but say "No invite found" for all of them.
 
 **Fix:** Set `secrets.defaultEnrPrivateKey=""` on every release so each gets its own secret (`<release>-enr-key`):
 ```bash
-helm upgrade <release> obol/dv-pod -n <ns> \
+helm upgrade <release> obol/dv-pod -n <ns> --version <current-chart-version> \
   --reuse-values \
   --set secrets.defaultEnrPrivateKey=""
 ```
@@ -157,7 +157,7 @@ done
 
 **Testing workaround:** disable charon-data persistence for the test run:
 ```bash
-helm upgrade <release> obol/dv-pod -n <ns> \
+helm upgrade <release> obol/dv-pod -n <ns> --version <current-chart-version> \
   --reuse-values \
   --set persistence.enabled=false
 ```

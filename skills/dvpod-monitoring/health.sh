@@ -31,7 +31,7 @@ if [[ -z "$RELEASE" && -z "$NAMESPACE" ]]; then
   NAMESPACE="${line%%/*}"
   RELEASE="${line##*/}"
 elif [[ -n "$RELEASE" && -z "$NAMESPACE" ]]; then
-  NAMESPACE=$(releases_json | jq -r ".[] | select(.name==\"$RELEASE\") | .namespace" | head -1)
+  NAMESPACE=$(releases_json | jq -r --arg r "$RELEASE" '.[] | select(.name==$r) | .namespace' | head -1)
   [[ -n "$NAMESPACE" ]] || { echo "ERROR: release '$RELEASE' not found in any namespace" >&2; exit 1; }
 fi
 
@@ -88,7 +88,7 @@ echo
 echo "### readyz histogram, last 30m"
 curl -sG "$PROM/api/v1/query_range" \
   --data-urlencode 'query=app_monitoring_readyz' \
-  --data-urlencode "start=$(date -u -d '30 minutes ago' +%s)" \
+  --data-urlencode "start=$(( $(date -u +%s) - 1800 ))" \
   --data-urlencode "end=$(date -u +%s)" \
   --data-urlencode 'step=60s' \
   | jq -r '[.data.result[0].values[]?[1]] | group_by(.) | map("  code=\(.[0]) count=\(length)") | .[]'

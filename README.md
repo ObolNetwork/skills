@@ -28,15 +28,39 @@ claude plugin install obol@obol
 
 The plugin is installed for your user by default. Use `--scope project` or `--scope local` to install it only for the current project.
 
+### Staying up to date
+
+Claude Code only auto-updates official marketplaces, so **turn on auto-update for `obol`** after installing: `/plugin` → **Marketplaces** → `obol` → **Enable auto-update**.
+
+To update manually:
+```bash
+claude plugin marketplace update obol
+claude plugin update obol@obol
+```
+
+The plugin also checks for a newer release once a day at session start and tells you if you're behind. Set `OBOL_SKILLS_NO_UPDATE_CHECK=1` to turn this off.
+
+**For teams/admins:** enable auto-update for everyone via managed settings:
+```json
+{
+  "extraKnownMarketplaces": {
+    "obol": {
+      "source": { "source": "github", "repo": "ObolNetwork/skills" },
+      "autoUpdate": true
+    }
+  }
+}
+```
+
 ### Manual Installation
 
 Copy the `skills/` directory into your project's `.claude/skills/` folder.
 
 ## Configuration
 
-### Required for obol-monitoring skill: Grafana API Token
+### Required for `obol-monitoring` skill: Grafana API Token
 
-Set the `OBOL_GRAFANA_API_TOKEN` environment variable. The Obol Core team can provide you with one.
+Set the `OBOL_GRAFANA_API_TOKEN` environment variable. The Obol core team can provide clients with one for their hosted environment, or you can create one in your self-hosted Grafana environment (such as those that come with [charon-distributed-validator-node](https://github.com/ObolNetwork/charon-distributed-validator-node)).
 
 **Option 1 — Shell profile** (recommended):
 ```bash
@@ -51,23 +75,28 @@ OBOL_GRAFANA_API_TOKEN=glsa_...
 
 ## Available Skills
 
-### obol-monitoring
+Claude picks the right skill from your request, or you can call one directly with `/obol:<skill-name>`. Full docs, prerequisites, and example prompts: **[docs.obol.org/agent-skills](https://docs.obol.org/agent-skills)**.
 
-Monitor and diagnose Obol DVT cluster performance using Grafana (Prometheus metrics + Loki logs).
+| Skill | Use it to | Needs |
+| --- | --- | --- |
+| [`create-cluster-invitation`](skills/create-cluster-invitation/SKILL.md) | Create a DV cluster invitation and coordinate the DKG | Docker (`charon` image), or the Obol SDK |
+| [`test-a-dv-cluster`](skills/test-a-dv-cluster/SKILL.md) | Run `charon alpha test` suites against a node or cluster | A running Charon, or Docker |
+| [`dvpod`](skills/dvpod/SKILL.md) | Deploy, upgrade, back up, and troubleshoot a DV on Kubernetes | `kubectl`, `helm`, a beacon node |
+| [`dvpod-monitoring`](skills/dvpod-monitoring/SKILL.md) | Query a deployed DVpod's metrics and logs (read-only) | `kubectl`, `helm` |
+| [`obol-monitoring`](skills/obol-monitoring/SKILL.md) | Triage cluster health and duty failures in Obol's hosted Grafana | Python 3.6+, `OBOL_GRAFANA_API_TOKEN` |
+| [`run-obol-stack`](skills/run-obol-stack/SKILL.md) | Install, operate, and sell paid agent services from the Obol Stack | Docker, a model provider |
 
-**Scripts:**
-- `cluster_triage.py` — First-pass cluster health check
-- `duty_analysis.py` — Deep slot-level failure analysis with timeline reconstruction
-- `fleet_overview.py` — Multi-cluster fleet view with version/client diversity
+Try, for example:
 
-**Usage:** Ask Claude to triage a cluster, analyze duty failures, or get a fleet overview. The skill guides Claude through the appropriate diagnostic workflow.
+```text
+Help me create a 4-operator DV cluster on Hoodi with my friends, inviting them by Ethereum address.
+Run the Charon test suites against my node and tell me if anything needs fixing before activation.
+Give me a health snapshot of my DVpod and explain any Charon errors from the last hour.
+Install the Obol Stack on this machine and help me sell my first paid agent service.
+```
 
-See [skills/obol-monitoring/SKILL.md](skills/obol-monitoring/SKILL.md) for the full reference including failure reason codes, metrics guide, and triage workflow.
-
-## Requirements
-
-- Python 3.6+ (stdlib only, no pip packages needed)
-- `OBOL_GRAFANA_API_TOKEN` environment variable
+> [!WARNING]
+> An AI agent can make mistakes. Always check withdrawal addresses, fee recipients, operator sets, and the target network yourself before depositing. Never paste private keys or mnemonics into an AI chat.
 
 ## Adding New Skills
 
@@ -81,3 +110,18 @@ skills/
     ├── SKILL.md
     └── ...
 ```
+
+## Releasing
+
+Users install the plugin from the release tag that `.claude-plugin/marketplace.json` points at (`"ref": "v<version>"`), not from `main`. Merging changes to `main` ships nothing; moving that `ref` is the release. `main` requires linear history, so tags are always cut from `main` after merge:
+
+1. **Change PR:** make your changes and bump `version` in `.claude-plugin/plugin.json` (semver: patch for fixes, minor for new skills or behaviour, major for breaking changes). Leave the marketplace `ref` alone. Merge.
+2. **Tag `main`:**
+   ```bash
+   git switch main && git pull
+   git tag -a v<version> -m "obol <version>"
+   git push origin v<version>
+   ```
+3. **Release PR:** set the marketplace `ref` to the new tag. Merging this publishes it to users.
+
+CI checks that the marketplace `ref` is a `vX.Y.Z` tag that exists on GitHub, sits on `main`, and contains that version in `plugin.json`.

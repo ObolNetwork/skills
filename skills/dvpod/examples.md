@@ -8,7 +8,7 @@ The simplest deployment — auto-generates ENR, uses defaults for everything els
 helm repo add obol https://obolnetwork.github.io/helm-charts
 helm repo update
 
-helm upgrade --install my-dv-pod obol/dv-pod \
+helm upgrade --install my-dv-pod obol/dv-pod --version 0.19.1 \
   --namespace dv-pod --create-namespace \
   --set charon.operatorAddress=0x1234567890abcdef1234567890abcdef12345678 \
   --set 'charon.beaconNodeEndpoints[0]=http://beacon-node:5052' \
@@ -25,7 +25,7 @@ kubectl get secret charon-enr-private-key -n dv-pod \
 ## Example 2: Sepolia Testnet Deploy
 
 ```bash
-helm upgrade --install test-dv obol/dv-pod \
+helm upgrade --install test-dv obol/dv-pod --version 0.19.1 \
   --namespace dv-pod-testnet --create-namespace \
   --set charon.operatorAddress=0xYOUR_ADDRESS \
   --set network=sepolia \
@@ -39,7 +39,7 @@ helm upgrade --install test-dv obol/dv-pod \
 When you have a cluster invitation from the Obol Launchpad:
 
 ```bash
-helm upgrade --install my-dv-pod obol/dv-pod \
+helm upgrade --install my-dv-pod obol/dv-pod --version 0.19.1 \
   --namespace dv-pod --create-namespace \
   --set charon.operatorAddress=0xYOUR_ADDRESS \
   --set 'charon.beaconNodeEndpoints[0]=http://beacon:5052' \
@@ -50,7 +50,7 @@ helm upgrade --install my-dv-pod obol/dv-pod \
 ## Example 4: Using Teku Validator Client
 
 ```bash
-helm upgrade --install my-dv-pod obol/dv-pod \
+helm upgrade --install my-dv-pod obol/dv-pod --version 0.19.1 \
   --namespace dv-pod --create-namespace \
   --set charon.operatorAddress=0xYOUR_ADDRESS \
   --set 'charon.beaconNodeEndpoints[0]=http://beacon:5052' \
@@ -63,7 +63,7 @@ helm upgrade --install my-dv-pod obol/dv-pod \
 Prysm requires accepting Terms of Service:
 
 ```bash
-helm upgrade --install my-dv-pod obol/dv-pod \
+helm upgrade --install my-dv-pod obol/dv-pod --version 0.19.1 \
   --namespace dv-pod --create-namespace \
   --set charon.operatorAddress=0xYOUR_ADDRESS \
   --set 'charon.beaconNodeEndpoints[0]=http://beacon:5052' \
@@ -84,7 +84,7 @@ kubectl create secret generic charon-enr-private-key -n dv-pod \
   --from-literal=enr="enr:-IS4Q..."
 
 # Step 2: Deploy referencing the secret
-helm upgrade --install my-dv-pod obol/dv-pod \
+helm upgrade --install my-dv-pod obol/dv-pod --version 0.19.1 \
   --namespace dv-pod \
   --set charon.operatorAddress=0xYOUR_ADDRESS \
   --set 'charon.beaconNodeEndpoints[0]=http://beacon:5052' \
@@ -103,7 +103,7 @@ Each operator will sign for their node on the Launchpad independently.
 
 ```bash
 # Node 0 — Operator A
-helm upgrade --install my-dv-pod-0 obol/dv-pod \
+helm upgrade --install my-dv-pod-0 obol/dv-pod --version 0.19.1 \
   --namespace dv-pod --create-namespace \
   --set charon.operatorAddress=0xOPERATOR_A_ADDRESS \
   --set network=hoodi \
@@ -112,7 +112,7 @@ helm upgrade --install my-dv-pod-0 obol/dv-pod \
   --timeout=10m
 
 # Node 1 — Operator B
-helm upgrade --install my-dv-pod-1 obol/dv-pod \
+helm upgrade --install my-dv-pod-1 obol/dv-pod --version 0.19.1 \
   --namespace dv-pod \
   --set charon.operatorAddress=0xOPERATOR_B_ADDRESS \
   --set network=hoodi \
@@ -121,7 +121,7 @@ helm upgrade --install my-dv-pod-1 obol/dv-pod \
   --timeout=10m
 
 # Node 2 — Operator C
-helm upgrade --install my-dv-pod-2 obol/dv-pod \
+helm upgrade --install my-dv-pod-2 obol/dv-pod --version 0.19.1 \
   --namespace dv-pod \
   --set charon.operatorAddress=0xOPERATOR_C_ADDRESS \
   --set network=hoodi \
@@ -130,7 +130,7 @@ helm upgrade --install my-dv-pod-2 obol/dv-pod \
   --timeout=10m
 
 # Node 3 — Operator D
-helm upgrade --install my-dv-pod-3 obol/dv-pod \
+helm upgrade --install my-dv-pod-3 obol/dv-pod --version 0.19.1 \
   --namespace dv-pod \
   --set charon.operatorAddress=0xOPERATOR_D_ADDRESS \
   --set network=hoodi \
@@ -154,7 +154,7 @@ Each operator must accept the cluster invite on the Launchpad for DKG to begin.
 ## Example 8: Multiple Beacon Nodes with Fallbacks
 
 ```bash
-helm upgrade --install my-dv-pod obol/dv-pod \
+helm upgrade --install my-dv-pod obol/dv-pod --version 0.19.1 \
   --namespace dv-pod --create-namespace \
   --set charon.operatorAddress=0xYOUR_ADDRESS \
   --set 'charon.beaconNodeEndpoints[0]=http://primary-beacon:5052' \
@@ -168,7 +168,7 @@ helm upgrade --install my-dv-pod obol/dv-pod \
 For resource-constrained environments:
 
 ```bash
-helm upgrade --install my-dv-pod obol/dv-pod \
+helm upgrade --install my-dv-pod obol/dv-pod --version 0.19.1 \
   --namespace dv-pod --create-namespace \
   --set charon.operatorAddress=0xYOUR_ADDRESS \
   --set 'charon.beaconNodeEndpoints[0]=http://beacon:5052' \
@@ -184,7 +184,7 @@ helm upgrade --install my-dv-pod obol/dv-pod \
 `centralMonitoring.enabled=true` deploys a local Prometheus pod (`prom/prometheus:v3.11.1`, in-cluster service `prometheus:9090`) that scrapes Charon every 12s and remote-writes to `centralMonitoring.promEndpoint` (default: Obol's hosted backend).
 
 ```bash
-helm upgrade --install my-dv-pod obol/dv-pod \
+helm upgrade --install my-dv-pod obol/dv-pod --version 0.19.1 \
   --namespace dv-pod --create-namespace \
   --set charon.operatorAddress=0xYOUR_ADDRESS \
   --set 'charon.beaconNodeEndpoints[0]=http://beacon:5052' \
@@ -205,7 +205,7 @@ To remote-write to your own backend instead of Obol's, override `centralMonitori
 Charon can push structured logs directly to a Loki endpoint (no log-shipping sidecar required), in addition to stderr:
 
 ```bash
-helm upgrade --install my-dv-pod obol/dv-pod \
+helm upgrade --install my-dv-pod obol/dv-pod --version 0.19.1 \
   --namespace dv-pod --create-namespace \
   --set charon.operatorAddress=0xYOUR_ADDRESS \
   --set 'charon.beaconNodeEndpoints[0]=http://beacon:5052' \
@@ -219,7 +219,7 @@ helm upgrade --install my-dv-pod obol/dv-pod \
 For clusters running Prometheus Operator:
 
 ```bash
-helm upgrade --install my-dv-pod obol/dv-pod \
+helm upgrade --install my-dv-pod obol/dv-pod --version 0.19.1 \
   --namespace dv-pod --create-namespace \
   --set charon.operatorAddress=0xYOUR_ADDRESS \
   --set 'charon.beaconNodeEndpoints[0]=http://beacon:5052' \
@@ -233,7 +233,7 @@ helm upgrade --install my-dv-pod obol/dv-pod \
 A comprehensive production deployment with all recommended settings:
 
 ```bash
-helm upgrade --install prod-dv obol/dv-pod \
+helm upgrade --install prod-dv obol/dv-pod --version 0.19.1 \
   --namespace dv-prod --create-namespace \
   --set charon.operatorAddress=0xYOUR_ADDRESS \
   --set charon.nickname="prod-operator-1" \

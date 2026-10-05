@@ -15,8 +15,14 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib.grafana import (
-    get_auth_headers, discover_datasources, prom_query, loki_series,
-    get_cluster_size, cluster_selector, parse_bn_client, parse_vc_client,
+    cluster_selector,
+    discover_datasources,
+    get_auth_headers,
+    get_cluster_size,
+    loki_series,
+    parse_bn_client,
+    parse_vc_client,
+    prom_query,
 )
 
 
