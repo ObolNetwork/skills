@@ -3,6 +3,7 @@
 All functions use Python stdlib only. No external dependencies required.
 """
 
+import http.client
 import json
 import os
 import re
@@ -45,7 +46,8 @@ def fetch_json(url, headers, timeout=30):
     except urllib.error.URLError as e:
         print(f"URL error: {e.reason}", file=sys.stderr)
         return None
-    except Exception as e:
+    except (OSError, ValueError, http.client.HTTPException) as e:
+        # Timeouts, dropped connections, malformed/undecodable JSON
         print(f"Error: {e}", file=sys.stderr)
         return None
 

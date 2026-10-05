@@ -13,9 +13,15 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib.grafana import (
-    get_auth_headers, discover_datasources, loki_query,
-    cluster_selector, slot_to_time, slot_to_timestamp,
-    parse_embedded_ts, extract_logfmt, get_cluster_size,
+    cluster_selector,
+    discover_datasources,
+    extract_logfmt,
+    get_auth_headers,
+    get_cluster_size,
+    loki_query,
+    parse_embedded_ts,
+    slot_to_time,
+    slot_to_timestamp,
 )
 
 

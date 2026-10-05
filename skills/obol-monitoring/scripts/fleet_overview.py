@@ -15,8 +15,12 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib.grafana import (
-    get_auth_headers, discover_datasources, prom_query, loki_series,
-    parse_bn_client, parse_vc_client,
+    discover_datasources,
+    get_auth_headers,
+    loki_series,
+    parse_bn_client,
+    parse_vc_client,
+    prom_query,
 )
 
 
@@ -158,7 +162,7 @@ def main():
     total_vc = {}
     total_nodes = 0
 
-    all_observed = set(k[0] for k in node_info) | set(cluster_sizes.keys())
+    all_observed = {k[0] for k in node_info} | set(cluster_sizes.keys())
 
     for cn in sorted(all_observed):
         size = cluster_sizes.get(cn, 0)
@@ -173,7 +177,7 @@ def main():
         validators = val_map.get(cn, 0)
 
         # Known peers
-        known_peers = set(k[1] for k in node_info if k[0] == cn)
+        known_peers = {k[1] for k in node_info if k[0] == cn}
         unknown_count = max(0, size - len(known_peers))
 
         # Count clients
