@@ -60,7 +60,7 @@ Copy the `skills/` directory into your project's `.claude/skills/` folder.
 
 ### Required for `obol-monitoring` skill: Grafana API Token
 
-Set the `OBOL_GRAFANA_API_TOKEN` environment variable. The Obol core team can provide clients with one for their hosted environment, or you can create one in your self-hosted Grafana environment (such as those that come with [charon-distributed-validator-node](https://github.com/ObolNetwork/charon-distributed-validator-node)).
+Set the `OBOL_GRAFANA_API_TOKEN` environment variable. The Obol core team can provide one for Obol's hosted Grafana. The skill only works against that hosted environment, so your cluster must [push metrics and logs to Obol](https://docs.obol.org/run-a-dv/start/obol-monitoring). Tokens from a self-hosted Grafana won't work. For a DVpod, use `dvpod-monitoring` instead.
 
 **Option 1 — Shell profile** (recommended):
 ```bash

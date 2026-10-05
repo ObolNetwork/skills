@@ -337,7 +337,7 @@ Skill-internal references (load these when their topic comes up):
 - [`references/networks-and-apps.md`](references/networks-and-apps.md) — `obol network` (Ethereum + Aztec sync), `obol-app` chart for deploying arbitrary Dockerfiles, `obol tunnel` for public exposure.
 
 External docs:
-- Stack repo + authoritative docs: [`ObolNetwork/obol-stack`](https://github.com/ObolNetwork/obol-stack), [docs.obol.org → Obol Stack](https://docs.obol.org/obol-stack/).
+- Stack repo + authoritative docs: [`ObolNetwork/obol-stack`](https://github.com/ObolNetwork/obol-stack), [docs.obol.org → Obol Stack](https://docs.obol.org/obol-stack/obol-stack).
 - Stack getting-started (human-facing walkthrough): `ObolNetwork/obol-stack/docs/getting-started.md`.
 - Monetize inference guide: `ObolNetwork/obol-stack/docs/guides/monetize-inference.md`.
 - The `obol-app` chart: `ObolNetwork/helm-charts/charts/obol-app/` — read `values.yaml` for the full knob surface.
