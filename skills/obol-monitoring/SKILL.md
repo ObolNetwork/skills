@@ -1,7 +1,7 @@
 ---
 name: obol-monitoring
 description: Monitor and diagnose Obol DVT cluster performance using their hosted Grafana (Prometheus metrics + Loki logs)
-user-invokable: true
+user-invocable: true
 ---
 
 # Obol Cluster Monitoring
@@ -61,6 +61,10 @@ Set the Grafana API token:
 ```bash
 export OBOL_GRAFANA_API_TOKEN="glsa_..."
 ```
+
+**Scope: Obol's hosted Grafana only.** The scripts target `grafana.monitoring.gcp.obol.tech` and its `obol-prometheus-ds` datasource, and the queries rely on the `cluster_name`, `cluster_network`, and `cluster_peer` labels that Obol's central monitoring attaches. The token must be one the Obol team issued for that Grafana; a token from a self-hosted Grafana won't work. A cluster only appears there if its nodes [push metrics and logs to Obol](https://docs.obol.org/run-a-dv/start/obol-monitoring). If the user's cluster isn't pushing to Obol:
+- **DVpod on Kubernetes** → hand off to the `dvpod-monitoring` skill.
+- **CDVN / LCDVN Docker Compose** → there's no skill for the local stack. Point the user at their local Grafana (`http://localhost:3000`, "Charon Overview" dashboard), or read `docker compose logs charon`, or query Charon's metrics directly. This skill's failure-reason and metrics references below still apply when interpreting them.
 
 ## Scripts
 
@@ -331,9 +335,11 @@ If the issue is intermittent or slot-specific, use `duty_analysis.py` for a spec
 
 ## External References
 
-- [Obol Overview](https://docs.obol.org/next/learn/intro/obol-overview)
-- [Quickstart Guide](https://docs.obol.org/next/run/start/quickstart-overview)
-- [Configuration Reference](https://docs.obol.org/next/adv/configuration)
+- [Obol Overview](https://docs.obol.org/learn/readme/learn-about-obol)
+- [Quickstart Guide](https://docs.obol.org/run-a-dv/start/quickstart_overview)
+- [Charon CLI Reference](https://docs.obol.org/learn/charon/charon-cli-reference)
+- [Charon Metrics Reference](https://docs.obol.org/run-a-dv/running/metrics)
+- [Duty Failure Reasons](https://docs.obol.org/advanced-and-troubleshooting/troubleshooting/duty-failure-reasons)
 - [CDVN Repo](https://github.com/ObolNetwork/charon-distributed-validator-node) — Standard deployment
 - [LCDVN Repo](https://github.com/ObolNetwork/lido-charon-distributed-validator-node) — Lido-specific deployment
 - [Charon Source](https://github.com/ObolNetwork/charon) — Charon source code
