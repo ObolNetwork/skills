@@ -24,7 +24,7 @@ Match on any of:
 - User wants to sync a local Ethereum / L2 / Aztec node and use it (`obol network install`, `obol network sync`).
 - User wants to expose an agent service on the internet with a tunnel (`obol tunnel`).
 - User wants to **charge** for an agent service — inference, HTTP API, RPC, indexed data, or a whole specialised agent's replies (`obol sell ...`, ERC-8004 registration, x402).
-- User wants to **build an agent business** — "an agent people will pay for", productising a sub-agent, storefront branding (`obol sell info`), buying a domain (`obol domain`).
+- User wants to **build an agent business** — "an agent people will pay for", productising a sub-agent, storefront branding (`obol sell info`), getting a real domain for the storefront.
 - User wants to **brainstorm what to build or sell** on the Stack — workshopping business ideas or use cases, "what could I do with this", "is my idea any good", pricing a concept — even before installing anything (see [Workshop the business idea](#workshop-the-business-idea-pre-install-and-post-install)).
 - User mentions "OpenClaw", "Obol Agent", "8004", "agent registration", "agent commerce", "payment-gated endpoint", "local inference + tunnel".
 - User is running the `obol sell demo` flow (lands in 0.9+) and wants help paying for / interpreting the demo skill.
@@ -40,7 +40,7 @@ Don't use this skill for:
 Four concepts the user needs, nothing more:
 
 1. **Cluster** — a local k3d Kubernetes cluster, brought up by `obol stack up`. All services run as pods.
-2. **Obol Agent** — the AI agent running inside the cluster. Gets its own Ethereum wallet (backed by a remote-signer), a bearer token for its gateway, and a pre-installed skill set. As of Stack 0.9, the default agent runtime is **Hermes** ([github.com/NousResearch/hermes](https://github.com/NousResearch/hermes)). OpenClaw is supported as an alternate runtime via `obol agent new --runtime openclaw`. Prefer "Obol Agent" generically when explaining, and name the runtime only when a specific CLI verb requires it (`obol hermes ...`, `obol openclaw ...`).
+2. **Obol Agent** — the AI agent running inside the cluster. Gets its own Ethereum wallet (backed by a remote-signer), a bearer token for its gateway, and a pre-installed skill set. The agent runtime is **Hermes** ([github.com/NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)). OpenClaw is **deprecated** (removed in v0.16) — don't steer new users to it. Prefer "Obol Agent" generically when explaining, and name the runtime only when a specific CLI verb requires it (`obol hermes ...`).
 3. **x402** — HTTP 402 micropayments gateway. Any pod behind `/services/<name>/*` gets payment-gated via Traefik ForwardAuth. Stack 0.9+ supports both **$OBOL on Ethereum mainnet** and **USDC on Base / Base-Sepolia / Ethereum / Polygon / Avalanche / Arbitrum**. Critical $OBOL property: when buyers pay in OBOL on mainnet, the Obol-operated facilitator (`x402.gcp.obol.tech`) batches an EIP-2612 permit with the on-chain transfer at settlement — **buyers never spend ETH on gas** and skip the one-time `approve(Permit2, max)` step. Sellers receive OBOL directly.
 4. **Tunnel** — Cloudflare quick tunnel that publishes `/services/<name>/*`, the `/skill.md` service catalogue, and `/.well-known/agent-registration.json` for ERC-8004 discovery. The frontend and eRPC routes are hostname-restricted to `obol.stack` and **must never** be exposed to the tunnel.
 
@@ -86,7 +86,7 @@ One-liner:
 bash <(curl -fsSL https://stack.obol.org)
 ```
 
-What it does: installs the `obol` CLI plus `kubectl`, `helm`, `k3d`, `helmfile`, `k9s` into `~/.local/bin/`, configures PATH, offers to start the cluster. On success:
+What it does: installs the `obol` CLI plus its pinned `kubectl`, `helm`, `k3d`, `helmfile`, `k9s`, `helm-diff` into `~/.local/bin/`, configures PATH, offers to start the cluster. After that, `obol` manages its own toolchain: missing or outdated tools are installed automatically on `obol stack init` / `obol stack up` (tools the user points at via `OBOL_<TOOL>` or that are found on `$PATH` are never modified). There is **no Homebrew package yet** — it is planned for a stable release, so don't suggest `brew install`. On success:
 
 ```bash
 obol version
@@ -95,8 +95,11 @@ obol version
 should report a version. Subsequent updates:
 
 ```bash
-obol update      # update CLI + pinned tools
-obol upgrade     # upgrade in-cluster components
+obol stack export --file ~/obol-stack-backup.tar.gz   # back up first (stack must be running)
+bash <(curl -fsSL https://stack.obol.org)             # update the obol CLI itself
+obol update                                           # show what's outdated: charts, pinned tools, CLI (changes nothing)
+obol upgrade                                          # install/upgrade pinned tools, apply chart CRDs, then upgrade charts
+obol upgrade --tools-only                             # tools only, no cluster needed
 ```
 
 **For contributors working from source** (not the typical user path), they'll use `OBOL_DEVELOPMENT=true ./obolup.sh` from inside a repo checkout — don't recommend this to end users.
@@ -121,7 +124,9 @@ Crucially, **the default agent is created by `stack up` itself**. `obol agent ne
 - `obol hermes chat` — interactive chat TUI in the terminal (the most direct path to "is the agent alive and does it route to my LLM?")
 - `obol hermes setup` — interactive flow to wire up messaging integrations (Telegram, Discord, Slack, etc.) so the agent can ping the user out-of-band when long-running work finishes
 - `obol hermes skills list` — live skill catalogue
-- `obol hermes <anything>` is a passthrough to the in-cluster Hermes binary; `obol hermes --help` is the source of truth.
+- `obol hermes <anything>` is a passthrough to the in-cluster Hermes binary; `obol hermes -- --help` shows the native Hermes CLI (`obol hermes --help` shows only obol's wrapper help). To target an agent other than the default, `--agent <name>` must be the **first** argument (`obol hermes --agent research chat`) or set `OBOL_AGENT=research`; anything after is passed to Hermes verbatim.
+
+On the first `stack up` the CLI opens the dashboard in a browser; commands that create something print a dashboard link. `--no-open` (or `OBOL_NO_BROWSER=1`) suppresses the browser; it is never opened over SSH, in CI, or with `-o json`.
 
 After bring-up, sanity-check pods:
 
@@ -137,22 +142,25 @@ The top-level verbs. Use `obol <verb> --help` for full details rather than memor
 
 | Verb | What | When to reach for it |
 |------|------|---------------------|
-| `stack` | `init`, `up`, `down`, `purge`, `export`, `import` | Cluster lifecycle. `down` preserves config + data; `purge --force` wipes everything (it offers a full `export` first). `export`/`import` = full backup archive (config, agent brains, encrypted wallets, CRs) — recommend an `export` before anything destructive. |
-| `agent` | `init`, `new`, `setup`, `sync`, `auth`, `list`, `delete`, `wallet` | Manage agent instances. `init` (re)creates the stack-managed default; `new --runtime hermes\|openclaw` spawns an additional instance. |
+| `stack` | `init`, `up`, `down`, `purge`, `export`, `import` | Cluster lifecycle. `down` preserves config + data; `purge` offers a full `export` first, `purge --force` also wipes data. `up` replays recorded state from the config dir (models, local networks, RPC upstreams, eRPC overlay, x402 pricing, ERC-8004 identity, agents, storefront branding, apps, sell offers), so a deleted/recreated cluster comes back. `export --file <path>` = full backup archive (config, agent brains, wallets, CRs; contains secrets); `import <archive>` restores in one step, bringing the stack up itself. Recommend an `export` before anything destructive or any upgrade. |
+| `agent` | `init`, `new`, `update`, `setup`, `sync`, `auth`, `list`, `delete`, `wallet` | Manage agent instances. `init` (re)creates the stack-managed default; `new <name>` spawns an additional instance and, without `--model`, pins the cluster's top-ranked model; `update <name> --model/--skills/--objective` changes it later. |
 | `hermes` | passthrough to the native Hermes CLI inside the default agent pod | `chat`, `skills`, `config`, `setup` (messaging integrations), `dashboard`, etc. Default runtime as of Stack 0.9. |
-| `openclaw` | `onboard`, `setup`, `sync`, `list`, `delete`, `dashboard`, `cli`, `token`, `skills` | OpenClaw-specific runtime ops (alternate runtime). |
+| `openclaw` | `onboard`, `setup`, `sync`, `list`, `delete`, `dashboard`, `cli`, `token`, `skills`, `wallet` | **Deprecated, removed in v0.16.** Only for migrating off: back up the Hermes wallet first, then `obol agent wallet backup --runtime openclaw <id> --file w.json` and `obol agent wallet restore --runtime hermes --input w.json --force`. |
 | `network` | `list`, `install`, `add`, `remove`, `status`, `sync`, `delete` | Deploy a blockchain network (ethereum / aztec). Two-stage: `install` writes config, `sync` deploys. |
 | `app` | `install`, `sync`, `list`, `delete` | Deploy any Helm chart from Artifact Hub or your own Dockerfile via the `obol-app` chart. |
 | `sell` | `demo`, `inference`, `http`, `agent`, `mcp`, `list`, `status`, `test`, `update`, `stop`, `delete`, `resume`, `pricing`, `register`, `identity`, `info` | Create and run payment-gated endpoints. **`demo` is the canonical first-sale experience (0.9+)** — start there with new users. `sell agent <name>` wraps an `Agent` CR as an OpenAI-compatible paid endpoint (the margin-bearing path). `sell info` / `sell info set` = storefront branding + buyer's-eye catalogue view. `sell resume` replays all offers after a host reboot (`--install-boot-unit` for systemd); `obol stack up` does the same automatically. `sell mcp` = foreground x402-paid MCP server (not persisted). |
 | `buy` | `inference [<seller-url>]` | Pre-pay a remote x402-gated **model** ("rent a brain"). Walks the seller's `/api/services.json` catalogue, resolves model + token, prompts for count with a cost preview, pre-signs auths via the agent's remote signer, and publishes `paid/<remote-model>` through LiteLLM. `--agent X` pays from X's wallet and switches only X to the paid model; `--set-default` promotes it globally; `--auto-refill` + `--cost-cap` bound agent-managed top-ups. Buying from another *agent* (specialised work, not raw completions) doesn't have a host-side wrapper — drive that from `obol hermes chat`. |
 | `model` | `setup` (+ `setup custom`), `status`, `list`, `pull`, `prefer`, `sync`, `discover`, `remove`, `token` | LiteLLM roster management: BYOK cloud providers (`setup --provider openrouter\|anthropic\|openai\|venice... --api-key ...`), custom OpenAI-compatible endpoints (`setup custom --endpoint ... --model ...`), Ollama pulls, and head-of-list preference (`prefer` + `sync` — the first chat-capable entry is the agents' default). |
-| `domain` | `list`, `search`, `check`, `register` | Optional Cloudflare Registrar wrapper for buying a real domain for the storefront (needs a scoped Cloudflare API token; `register` is billable). On success it hands off to `obol tunnel setup --hostname ...`. |
-| `tunnel` | `status`, `setup`, `restart`, `stop`, `logs` | Cloudflare tunnel for public exposure. Default is a temporary quick-tunnel URL that changes on restart. `setup` creates a **permanent** URL from a Cloudflare **connector token** (dashboard → Networks → Tunnels), routing its Public Hostname to `http://traefik.traefik.svc.cluster.local:80` — least-privilege, no account-wide API key. (Advanced: `setup --management local`, alias `tunnel login`, uses a browser login needing `cloudflared` installed.) |
-| `kubectl` / `helm` / `helmfile` / `k9s` | passthrough | Run the underlying tool with `KUBECONFIG` auto-set to the cluster. Prefer these over running the raw tools. |
-| `update` / `upgrade` | — | CLI + cluster components respectively. |
+| `domain` | `list`, `search <query>`, `check`, `register` | **Deprecated, removed in v0.16.** Have the user buy or transfer the domain in the Cloudflare dashboard instead, then run `obol tunnel setup`. |
+| `tunnel` | `status`, `setup`, `hostname`, `restart`, `stop`, `delete`, `logs` | Cloudflare tunnel for public exposure. Default is a temporary quick-tunnel URL that changes on restart. `setup` creates a **permanent** URL from a Cloudflare **connector token** (dashboard → Networks → Tunnels), routing its Public Hostname to `http://traefik.traefik.svc.cluster.local:80` — least-privilege, no account-wide API key. `hostname add` serves extra hostnames. (`setup --management local` and `tunnel login`, the browser-login path, are deprecated and removed in v0.16.) |
+| `kubectl` / `helm` / `helmfile` / `k9s` | passthrough | Exec the real tool (same flags, TTY, exit codes, completion). Always targets the stack, even if `KUBECONFIG` is exported — only an explicit `--kubeconfig` overrides it. Cluster-free commands (`helm template`, `kubectl version --client`) work before `stack up`. Nothing is written to `~/.kube/config`. |
+| `env` | `--shell`, `--unset` | `eval "$(obol env)"` exports `KUBECONFIG` + `PATH` so plain `kubectl`/`helm`/`k9s` (and krew, IDEs) target the stack. |
+| `update` / `upgrade` | `upgrade --tools-only` | `update` reports outdated charts, pinned tools and CLI; `upgrade` installs pinned tools, applies chart CRDs, then upgrades charts. The CLI itself updates by re-running the installer. |
 | `version` | — | Report version. First thing to check when debugging drift. |
 
 Always read `obol <verb> --help` fresh in a session — the help is the source of truth; this table rots.
+
+CLI conventions (v0.15+): `--output`/`-o` is only the global `human|json` switch — file paths go in `--file` (`stack export`, `agent wallet backup`); the global `--verbose` replaces per-command `-v`; obol's global flags can't precede a passthrough tool (`obol -o json kubectl …` is an error); unknown commands exit 2.
 
 ## Networks, apps, and the Cloudflare tunnel
 
@@ -201,7 +209,7 @@ NICHE → SCOUT → PACK ALPHA → BUILD → EVALUATE → PRICE → SELL → MEA
 3. **Build** — `obol agent new <name> --model <m> --skills <a,b> --objective "..." --create-wallet`.
 4. **Evaluate** — the gate most people skip: ask the agent the 10 hardest questions a paying buyer would ask, compare against a raw-model baseline, list only on a clear win. Details in the reference.
 5. **Price + sell** — `obol sell agent <name> --price ... --token OBOL|USDC --chain ethereum|base`.
-6. **Storefront** — `obol tunnel setup` for a permanent URL (optionally `obol domain register` for a real domain), `obol sell info set --display-name ... --tagline ... --logo-file ... --theme light|dark|obol --description '<markdown>'` for branding (applies to the storefront AND the 402 paywall pages; see the agent-commerce reference for the full knob set incl. `--accent`, `--css-file`, per-hostname overrides), `obol sell register --chain` for ERC-8004 discovery.
+6. **Storefront** — `obol tunnel setup` for a permanent URL (domain bought or transferred in the Cloudflare dashboard), `obol sell info set --display-name ... --tagline ... --logo-file ... --theme light|dark|obol --description '<markdown>'` for branding (applies to the storefront AND the 402 paywall pages; see the agent-commerce reference for the full knob set incl. `--accent`, `--css-file`, per-hostname overrides), `obol sell register --chain` for ERC-8004 discovery.
 7. **Measure + iterate** — revenue is the payTo wallet's on-chain balance; refresh alpha on a cadence; kill offers that don't sell within ~30 days and reuse the parts.
 
 The agent *inside* the Stack ships with a `sub-agent-business` skill covering this same loop from in-cluster — once the user is in `obol hermes chat`, their agent can scout, build children via its agent-factory, and evaluate them itself. Your job from outside is the host-side half: tunnel, domain, branding, registration signing, and honest quality judgment.
@@ -221,30 +229,25 @@ Inference vs. agent purchases solve different problems — don't conflate them:
 
 ### Two invariants worth memorising
 
-- **Don't recommend a specific marketplace URL.** The agent-registry ecosystem is evolving; register via `obol sell register --name <s> --private-key-file <f>` and let the user pick the registry.
+- **Don't recommend a specific marketplace URL.** The agent-registry ecosystem is evolving; register via `obol sell register --chain <chain> --name <s>` (signed by the agent's remote-signer; the wallet needs a little gas) and let the user pick the registry.
 - **`x402.gcp.obol.tech` is the default facilitator** for OBOL mainnet + the USDC chains the Stack supports. Buyers paying OBOL on mainnet **never spend ETH on gas** — the facilitator batches the permit with the transfer at settlement. Lead with this when explaining "why pay in OBOL".
 
 ## The Obol Agent
 
-**Default runtime as of Stack 0.9: Hermes.** OpenClaw is supported as an alternate runtime via `obol agent new --runtime openclaw`. The Stack is agent-runtime-agnostic by design; talk in terms of "the Obol Agent" generically and only name the runtime when a CLI verb requires it.
+**Runtime: Hermes.** OpenClaw is deprecated and will be removed in v0.16 — only mention it to users migrating off it (see the `openclaw` row above). Talk in terms of "the Obol Agent" generically and only name the runtime when a CLI verb requires it.
 
 Per-agent:
-- Unique Ethereum signing wallet, backed by a remote-signer Service in the same namespace. Back it up: `obol agent wallet backup -o ~/obol-wallet-backup.json --passphrase "..."`. **Back the export up externally** — losing it loses the agent's on-chain identity.
+- Unique Ethereum signing wallet, backed by a remote-signer Service in the same namespace. Back it up: `obol agent wallet backup --file ~/obol-wallet-backup.json --passphrase "..."` (sub-agent wallets: `obol stack export --file …` with the cluster running). **Back the export up externally** — losing it loses the agent's on-chain identity.
 - An API server bearer token: `obol agent auth [<instance>]` (regenerate with `--regenerate`).
 - An embedded skill set (covers cluster diag, Ethereum reads, local-wallet sending, DV monitoring, DeFi concepts, L2 routing, building-block patterns, security, indexing, orchestration, x402 buy/sell, and more — exact list grows).
 
 **Always have the user list skills fresh** rather than recite from memory:
 
 ```bash
-# Hermes (default)
-obol hermes skills list                 # live catalogue
+obol hermes skills list                 # live catalogue (default agent)
 obol hermes skills add <package>
 obol hermes skills remove <name>
-
-# OpenClaw (alternate)
-obol openclaw skills list <instance>
-obol openclaw skills add <package>
-obol openclaw skills remove <name>
+obol hermes --agent <name> skills list  # another agent (--agent must come first)
 ```
 
 Skill packages come from the [`ObolNetwork/skills`](https://github.com/ObolNetwork/skills) repo (global skills, also published as a Claude Code plugin — see "Adjacent Claude integration" below), the embedded skills shipped in the `obol` binary itself, and from each runtime's broader skill ecosystem. The agent is meant to grow — telling a user "your agent can do X" without checking the live catalogue will misroute them.
@@ -294,13 +297,13 @@ This bites every new user the first time they try to `kubectl exec` into a pod a
 
 ## Invariants and footguns
 
-- **Keep credentials out of the chat and off the command line.** Never ask the user to paste an API key, Cloudflare connector token, Cloudflare API token, or private key into the conversation, and never run a command with one as an argument (`--api-key sk-...`, `obol tunnel setup <token>`) — that puts it in the transcript and shell history. Instead: for `obol model setup`, have the user export the provider's env var (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `LLM_API_KEY`) in their own shell first, since the CLI reads it from there; for `obol tunnel setup`, `obol domain`, and anything else that takes a token, give the user the command and have them run it themselves in their own terminal. Use `--private-key-file <path>`, never an inline key, and don't read that file.
+- **Keep credentials out of the chat and off the command line.** Never ask the user to paste an API key, Cloudflare connector token, Cloudflare API token, or private key into the conversation, and never run a command with one as an argument (`--api-key sk-...`, `obol tunnel setup <token>`) — that puts it in the transcript and shell history. Instead: for `obol model setup`, have the user export the provider's env var (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `LLM_API_KEY`) in their own shell first, since the CLI reads it from there; for `obol tunnel setup` and anything else that takes a token, give the user the command and have them run it themselves in their own terminal. To seed a specific key (`obol wallet import`), use `--private-key-file <path>`, never an inline key, and don't read that file. Treat `obol stack export` archives the same way — they contain keystore passwords and API keys.
 - **Never expose the frontend (`/`) or eRPC (`/rpc`) routes to the public tunnel** — they are hostname-restricted to `obol.stack` for a reason. Exposing them is a critical security flaw.
-- **Wallet backups at `~/.config/obol/obol-wallet-backup-*.json`** (or `$OBOL_CONFIG_DIR/...`) must be protected and externally backed up. Losing them means losing agent identity.
-- **Obol Stack is alpha software.** Before a user reports a bug, have them run `obol version`, `obol update`, and `obol upgrade` — version-drift between CLI + in-cluster charts is the single most common cause of weirdness.
+- **Wallet backups** (`obol agent wallet backup` writes `obol-wallet-backup-<addr>.json|.enc` to the current directory unless `--file` is given) and `obol stack export` archives must be protected and stored outside `~/.config/obol/`. Losing them means losing agent identity.
+- **Obol Stack is alpha software.** Before a user reports a bug, have them run `obol version` and `obol update`, then `obol upgrade` (after an `obol stack export --file …` backup) — version-drift between CLI + in-cluster charts is the single most common cause of weirdness.
 - **`OBOL_DEVELOPMENT=true` is for contributors working on the Stack source** — don't set it for end users. It points at `.workspace/` dirs and uses `go run` instead of compiled binaries.
-- **`obol stack purge --force` is destructive** — wipes the cluster, config, and data (including wallet backups if the user hasn't copied them out first). Double-check wallet backups are outside `~/.config/obol/` before recommending purge.
-- **Don't mix `OBOL_CONFIG_DIR`s across shells** — if the user has multiple Stack checkouts (development worktrees), each has its own cluster state. `KUBECONFIG` is set from `$OBOL_CONFIG_DIR/kubeconfig.yaml`. Running `obol kubectl` from the wrong directory can point at the wrong cluster.
+- **`obol stack purge --force` is destructive** — wipes the cluster, config, and data (including wallet backups if the user hasn't copied them out first). `purge` offers a full `stack export` first — tell the user to accept it. Double-check backups are outside `~/.config/obol/` before recommending purge.
+- **Don't mix `OBOL_CONFIG_DIR`s across shells** — if the user has multiple Stack checkouts (development worktrees), each has its own cluster state. `obol kubectl` always uses `$OBOL_CONFIG_DIR/kubeconfig.yaml` (an exported `KUBECONFIG` is ignored), so a shell with the wrong `OBOL_CONFIG_DIR` points at the wrong cluster. Same for a stale `eval "$(obol env)"`.
 
 ## Handoff to the agent inside
 
@@ -315,7 +318,7 @@ Once the user has `obol hermes chat` open (or the agent's dashboard, depending o
 - Indexing (The Graph, Dune, custom)
 - Gas / security / MEV / reentrancy patterns
 
-**Have the user run `obol hermes skills list` (or `obol openclaw skills list <instance>` for OpenClaw) to see the live catalogue** instead of reciting it. The list evolves and running it fresh keeps the user on current reality.
+**Have the user run `obol hermes skills list` to see the live catalogue** instead of reciting it. The list evolves and running it fresh keeps the user on current reality.
 
 Things to hand over to the inside agent rather than driving yourself:
 - Buying from another **agent** for specialised work, and any exploratory `buy-x402` interactions (probe-then-decide, one-shot HTTP `pay`).
@@ -342,8 +345,8 @@ External docs:
 - Monetize inference guide: `ObolNetwork/obol-stack/docs/guides/monetize-inference.md`.
 - The `obol-app` chart: `ObolNetwork/helm-charts/charts/obol-app/` — read `values.yaml` for the full knob surface.
 - Obol Claude Code plugin (this skill + others): [`ObolNetwork/skills`](https://github.com/ObolNetwork/skills) — install with `/plugin marketplace add ObolNetwork/skills && /plugin install obol@obol`.
-- Hermes (default agent runtime): [`NousResearch/hermes`](https://github.com/NousResearch/hermes).
-- OpenClaw (alternate agent runtime): [openclaw.ai](https://openclaw.ai).
+- Hermes (agent runtime): [`NousResearch/hermes-agent`](https://github.com/NousResearch/hermes-agent).
+- OpenClaw (deprecated runtime, removed in v0.16): [openclaw.ai](https://openclaw.ai).
 - x402 protocol: [x402.org](https://www.x402.org/).
 - ERC-8004 reference: [eips.ethereum.org/EIPS/eip-8004](https://eips.ethereum.org/EIPS/eip-8004).
 - $OBOL token: [docs.obol.org → OBOL token](https://docs.obol.org/community-and-governance/obol-token/).

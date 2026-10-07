@@ -42,7 +42,7 @@ Defaults for examples: **OBOL on Ethereum mainnet** (headline gasless UX) or **U
 ### `obol sell inference` — monetising LLM completions
 
 ```bash
-obol sell inference my-model --model qwen3.5:35b --price 10 --per-mtok --token OBOL --chain ethereum
+obol sell inference my-model --model qwen3.5:35b --per-mtok 10 --token OBOL --chain ethereum
 obol sell pricing --pay-to <addr> --chain ethereum --token OBOL
 ```
 
@@ -56,7 +56,7 @@ Publishes the agent's LiteLLM inference behind x402. Buyers discover it via the 
 obol sell http my-service \
   --pay-to <addr> \
   --chain base \
-  --price 0.001 --per-request \
+  --per-request 0.001 \
   --upstream http://my-service.my-ns.svc.cluster.local \
   --port 8080 \
   --namespace my-ns \
@@ -67,7 +67,7 @@ Any pod in the cluster that exposes a Service can be wrapped. Common pattern:
 
 1. Deploy the upstream via `obol app install` + `obol app sync`.
 2. Wrap it with `obol sell http`.
-3. Announce via `obol sell register --name my-service --private-key-file <file>` (publishes to ERC-8004).
+3. Announce via `obol sell register --chain <chain> --name my-service` (publishes to ERC-8004; signed by the agent's remote-signer, which needs a little gas).
 
 ### `obol sell agent` — monetising a specialised sub-agent
 
