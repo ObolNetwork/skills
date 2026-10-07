@@ -83,7 +83,7 @@ Don't skip these — most "stack up fails" reports trace back to Docker not runn
 One-liner:
 
 ```bash
-bash <(curl -fsSL https://stack.obol.org)
+curl -fsSL https://stack.obol.org | bash
 ```
 
 What it does: installs the `obol` CLI plus its pinned `kubectl`, `helm`, `k3d`, `helmfile`, `k9s`, `helm-diff` into `~/.local/bin/`, configures PATH, offers to start the cluster. After that, `obol` manages its own toolchain: missing or outdated tools are installed automatically on `obol stack init` / `obol stack up` (tools the user points at via `OBOL_<TOOL>` or that are found on `$PATH` are never modified). There is **no Homebrew package yet** — it is planned for a stable release, so don't suggest `brew install`. On success:
@@ -96,7 +96,7 @@ should report a version. Subsequent updates:
 
 ```bash
 obol stack export --file ~/obol-stack-backup.tar.gz   # back up first (stack must be running)
-bash <(curl -fsSL https://stack.obol.org)             # update the obol CLI itself
+curl -fsSL https://stack.obol.org | bash              # update the obol CLI itself
 obol update                                           # show what's outdated: charts, pinned tools, CLI (changes nothing)
 obol upgrade                                          # install/upgrade pinned tools, apply chart CRDs, then upgrade charts
 obol upgrade --tools-only                             # tools only, no cluster needed
