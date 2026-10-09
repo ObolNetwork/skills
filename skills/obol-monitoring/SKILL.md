@@ -49,11 +49,14 @@ Scheduler → Fetcher → Consensus (QBFT) → DutyDB → ValidatorAPI → ParSi
 | Duty Type | Timing | Economic Impact | Notes |
 |-----------|--------|-----------------|-------|
 | `proposer` | Slot start (T+0) | **High** — missed block reward | Rare but high-value |
-| `attester` | T + slot_duration/3 (~T+4s) | **Medium** — missed attestation reward + inactivity penalty | Most common duty |
+| `attester` | T + slot_duration/3 (~T+4s); **gloas: T+3s** | **Medium** — missed attestation reward + inactivity penalty | Most common duty |
 | `sync_message` / `sync_contribution` | Various | **Low** — small sync committee rewards | Only for validators in sync committee |
-| `aggregator` / `prepare_aggregator` | T + 2*slot_duration/3 (~T+8s) | **None** — no direct economic reward or penalty | Non-economic, deprioritize |
+| `aggregator` / `prepare_aggregator` | T + 2*slot_duration/3 (~T+8s); **gloas: T+6s** | **None** — no direct economic reward or penalty | Non-economic, deprioritize |
+| `payload_attestation` (gloas) | consensus at T+6s (payload due), vote due T+9s | **Low** — PTC membership | New gloas duty; `no_consensus` here is worth a look |
+| `execution_payload_envelope` (gloas) | after a **self-built** proposal; payload must be seen by T+6s | **High** — a late envelope orphans the payload | Absent for builder-bid proposals (the builder reveals) |
+| `proposer_preferences` (gloas) | VC-pushed, epoch before the proposal | **High (indirect)** — if it fails, p2p builder bids are ignored for that slot → self-build | Not scheduled; keyed by proposal slot |
 
-**Slot timing**: 12 seconds per slot, 32 slots per epoch (6.4 minutes).
+**Slot timing**: 12 seconds per slot, 32 slots per epoch (6.4 minutes). Gloas moves the intra-slot deadlines (bps of the slot): attestation/sync message 2500 (3s), aggregate/contribution 5000 (6s), payload 5000 (6s), PTC 7500 (9s). Charon picks them up from the BN spec per fork; check `app_fork_current_activation_epoch` to know which regime a cluster is in.
 
 ## Environment
 
@@ -223,13 +226,14 @@ If the issue is intermittent or slot-specific, use `duty_analysis.py` for a spec
 
 ### Consensus
 - `core_consensus_timeout_total{duty="...",timer="..."}` — Consensus failures (the duty timed out entirely)
-- `core_consensus_decided_rounds{duty="..."}` — Rounds needed to decide (1 is ideal)
-- `core_consensus_duration_seconds{duty="..."}` — Time to reach consensus
+- `core_consensus_decided_rounds{duty="..."}` — Rounds needed to decide (1 is ideal). A **last-value gauge**, not a distribution: use `avg_over_time(...)` for a rate-ish view and Loki for per-slot rounds.
+- `core_consensus_duration_seconds{duty="..."}` — Time from **this node's own value being ready** (fetch done) to decided. Excludes the randao wait and the BN fetch, is not slot-relative, and lands in the first bucket (it is negative) when the cluster decided before this node's fetch returned. For slot-relative decision times use Loki (`QBFT consensus decided` minus slot start).
 - `core_consensus_insufficient_round_changes_total{protocol,duty,timer,outcome}` — Instances with too few round-change messages, by outcome (decided/timeout). Elevated values point at asymmetric connectivity or slow minority peers.
-- Timer type `eager_dlinear` = EagerDoubleLinear (default). Round N budget = N seconds from duty start time.
+- Timer type `eager_dlinear` = EagerDoubleLinear (default). Round N budget = N seconds from duty start time (proposer: +500ms on round 1 via `proposal_timeout`, so 1.5s, 2.5s, 3.5s).
+- `p2p_received_message_size_bytes{protocol="/charon/consensus/qbft/2.0.0"}` — consensus value size. QBFT attaches the full value to pre-prepare, prepare, commit and round-change messages, so multi-MB values (unblinded / gloas self-built proposals carrying the payload + blobs) slow every message, not just the pre-prepare.
 
 ### Beacon Node Performance & Identity
-- `app_eth2_latency_seconds{endpoint="..."}` — BN API latency. Key: `attestation_data` (should be <50ms for Lighthouse, ~170ms for Teku)
+- `app_eth2_latency_seconds{endpoint="..."}` — BN API latency. Key: `attestation_data` (should be <50ms for Lighthouse, ~170ms for Teku); proposals: `proposal` (pre-gloas, includes the mev-boost ~950ms auction wait) / `epbs_proposal` (gloas v4), `submit_execution_payload_envelope` (gloas; slow = EL import)
 - `app_beacon_node_peers` — BN's own peer count. <50 is concerning. **Gotcha**: with multiple configured BNs this gauge can flip between instances; do not correlate its time series across charon peers to detect shared BNs (peer-capped BNs also sit at identical values by coincidence).
 - `app_beacon_node_version{version,beacon_id}` — BN software version **and `beacon_id`, the BN's libp2p peer ID — the definitive per-instance identity**. Multiple series per `cluster_peer` = that node has multiple BN endpoints configured.
   - To answer "do these charon nodes share beacon nodes?": `group by (beacon_id, cluster_peer, version) (present_over_time(app_beacon_node_version{cluster_name="X"}[24h]))`, then invert to beacon_id → peers. A beacon_id under >1 cluster_peer is a genuinely shared instance. Identical `version` strings only prove same *build*, never same instance.
@@ -270,7 +274,7 @@ If the issue is intermittent or slot-specific, use `duty_analysis.py` for a spec
 
 ### Broadcast
 - `core_bcast_broadcast_total{duty="..."}` — Successful broadcasts per duty type.
-- `core_bcast_broadcast_delay_seconds{duty="..."}` — Delay from slot start to broadcast.
+- `core_bcast_broadcast_delay_seconds{duty="..."}` — Delay from **slot start + the duty's offset** to broadcast: proposer from slot start, attester from the attestation due (4s, gloas 3s), payload attestation / envelope from 6s (early broadcasts land in the first bucket).
 
 ## Loki Log Patterns
 
@@ -278,7 +282,9 @@ If the issue is intermittent or slot-specific, use `duty_analysis.py` for a spec
 
 **Timestamp handling**: Always parse the embedded `ts=` field (e.g., `ts=2026-03-09T20:53:59.123Z`). Loki receipt timestamps can skew 1-2 seconds due to batching. The `ts=` field is the application-level timestamp.
 
-**Log presence detection**: Use the Loki `/series` endpoint with `match[]={cluster_name="X"}` to check which peers send logs. Do NOT rely on `query_range` with `limit=1`.
+**Log presence detection**: Use the Loki `/series` endpoint with `match[]={cluster_name="X"}` to check which peers send logs (`lib.grafana.loki_series` returns a set of `(cluster_name, cluster_peer)`). Do NOT rely on `query_range` with `limit=1`.
+
+**Retention and limits**: Loki retention is short (observed ~2–4 days in Oct 2026) — per-slot reconstruction older than that is metrics-only. `query_range` caps at the requested `limit` (5000 is a safe page); pull long ranges in ≤1h chunks. Grafana returns **HTTP 429** under parallel load — keep ≤3 concurrent Loki queries and retry with backoff.
 
 ### Key Search Patterns
 | Event | LogQL filter |
@@ -294,6 +300,12 @@ If the issue is intermittent or slot-specific, use `duty_analysis.py` for a spec
 | Duplicate signatures | `\|= "Ignoring duplicate partial signature"` |
 | Signature aggregated | `\|= "Successfully aggregated partial signatures"` |
 | Attestation submitted | `\|= "Successfully submitted v2 attestations"` |
+| Proposal fetch start/end (gloas) | `\|= "Calling beacon node endpoint" \|= "endpoint=epbs_proposal"` / `\|= "Beacon node call finished"` (pre-gloas endpoint: `proposal`) |
+| Block signed by VC | `\|= "Beacon block proposal received from validator client"` (blinded: `"Blinded beacon block received from validator client"`) |
+| Block broadcast | `\|= "Successfully submitted block proposal to beacon node"` (has `delay=`) |
+| Envelope (gloas self-build) | `\|= "Execution payload envelope received from validator client"`, `"Successfully submitted execution payload envelope to beacon node"` |
+
+**Proposal timeline recipe** (debug logs): most lines carry `duty=<slot>/<type>`, but `QBFT consensus decided` logs `duty=proposer slot=<slot>` — a `\|~ "/proposer "` filter silently drops it, so query it separately. The proposal fetch is **gated on RANDAO aggregation** (`duty=<slot>/randao` aggregated) — the gap between slot start and fetch start is the VC randao call + parsig exchange. The decided leader is `leader_index` into the `peers="[0:name ...]"` list on `QBFT consensus instance starting`. A slot is a gloas self-build iff an `execution_payload_envelope` duty exists for it.
 
 ## Known Issues & Client Characteristics
 
@@ -311,7 +323,8 @@ If the issue is intermittent or slot-specific, use `duty_analysis.py` for a spec
 - Timer uses **absolute deadlines** based on slot start time
 - Round N has N seconds from duty start time
 - When leader's pre-prepare is received, timer doubles (gives 2N seconds total)
-- Attester duty start = slot_start + 4s, so round 1 deadline = slot_start + 5s, doubled = slot_start + 6s
+- Attester duty start = slot_start + 4s, so round 1 deadline = slot_start + 5s, doubled = slot_start + 6s (gloas: start 3s, deadline 4s, doubled 5s)
+- Proposer instances start at slot start with round 1 = 1.5s; the leader's value only exists after randao aggregation + BN fetch, so a slow fetch (e.g. BN epoch processing at the first slot of an epoch) shows up as `no pre-prepare, missing leader=[i]` round changes
 - If all peers have fast BNs and good P2P, consensus decides in round 1 within ~100ms
 
 ### Version Notes
