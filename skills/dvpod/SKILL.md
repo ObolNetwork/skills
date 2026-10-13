@@ -43,7 +43,7 @@ You help users deploy and operate one operator's share of an Obol Distributed Va
 ## Context
 
 - Chart: [helm-charts/charts/dv-pod](https://github.com/ObolNetwork/helm-charts/tree/main/charts/dv-pod) (README, QUICKSTART, TROUBLESHOOT, `values-examples/`), published at `https://obolnetwork.github.io/helm-charts`. Defer to the chart's README for anything this skill doesn't cover.
-- This skill targets chart **0.22.x** (charon `v1.11.0`, sidecar `obolnetwork/charon-dkg-sidecar:v1.1.0`). 0.22.0 needs that sidecar tag published; if it isn't, see the availability gate in [obol-stack.md](obol-stack.md) — it applies outside the Stack too.
+- This skill targets chart **0.22.x** (charon `v1.11.0`, sidecar `obolnetwork/charon-dkg-sidecar:1.1.0`). 0.22.0 needs that sidecar tag published; if it isn't, see the availability gate in [obol-stack.md](obol-stack.md) — it applies outside the Stack too.
 - References: [values-reference.md](values-reference.md), [examples.md](examples.md), [troubleshooting.md](troubleshooting.md), [discovery.md](discovery.md) (namespace / release / pod resolution, shared with `dvpod-monitoring`).
 
 ```bash
@@ -163,7 +163,7 @@ helm search repo obol/dv-pod --versions | head      # read the chart changelog/R
 helm upgrade <release> obol/dv-pod -n <ns> --version <chart-version> --reuse-values [--set k=v] --timeout=10m
 ```
 
-Always `--reuse-values` (unless the user wants a reset) and an explicit `--version`. Upgrading from < 0.22: don't until `charon-dkg-sidecar:v1.1.0` is published (init containers run on every start); unknown keys now fail the strict schema; see the chart README "Upgrading from chart < 0.22". During a pending DKG, every operator should be on the same runner and charon version.
+Always `--reuse-values` (unless the user wants a reset) and an explicit `--version`. Upgrading from < 0.22: don't until `charon-dkg-sidecar:1.1.0` is published (init containers run on every start); unknown keys now fail the strict schema; see the chart README "Upgrading from chart < 0.22". During a pending DKG, every operator should be on the same runner and charon version.
 
 ## Action: enr
 

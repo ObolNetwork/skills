@@ -10,11 +10,11 @@ Use this when the dv-pod goes into an Obol Stack (k3d cluster managed by the `ob
 
 ## Gates before installing
 
-1. **Chart and sidecar available.** The Stack flow needs chart **0.22.0+** (modes, status/ENR ConfigMaps, `statusReaders`), which needs the image `obolnetwork/charon-dkg-sidecar:v1.1.0`:
+1. **Chart and sidecar available.** The Stack flow needs chart **0.22.0+** (modes, status/ENR ConfigMaps, `statusReaders`), which needs the image `obolnetwork/charon-dkg-sidecar:1.1.0`:
    ```bash
    obol helm repo add obol https://obolnetwork.github.io/helm-charts && obol helm repo update
    obol helm search repo obol/dv-pod --versions | head
-   curl -fsS -o /dev/null -w '%{http_code}\n' https://hub.docker.com/v2/repositories/obolnetwork/charon-dkg-sidecar/tags/v1.1.0
+   curl -fsS -o /dev/null -w '%{http_code}\n' https://hub.docker.com/v2/repositories/obolnetwork/charon-dkg-sidecar/tags/1.1.0
    ```
    If 0.22.0 is missing or the tag check isn't `200`, the pod would sit in `ErrImagePull`: tell the user the Stack flow is **pending that release**. The interim option is the newest published chart < 0.22 in Launchpad mode only (no `mode`/`dkg.*`/`statusReaders`; read the public ENR from the ENR Secret's `enr` field; Hermes sees pods and logs but not DKG status; the DKG runs with the sidecar's bundled charon, so confirm its version with the other operators). Don't mix: every operator in one cluster should be on the same route and charon minor.
 2. **Node synced.** `obol network status ethereum/<id>` must say `synced` (see `run-obol-stack`). Only on a testnet, and only if the user explicitly accepts it, may you install earlier and let `charon.publicnodeFallback` carry the pod; say that mainnet duties must never depend on publicnode.

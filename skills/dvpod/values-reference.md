@@ -37,7 +37,7 @@ The values that matter most for `dv-pod` chart **0.22.x** (charon `v1.11.0`). Th
 | `dkg.status.enabled` | Sidecar writes progress to ConfigMap `<fullname>-dkg-status` | `true` |
 | `charon.dkgSidecar.targetConfigHash` | `launchpad` mode only: join just this definition | `""` |
 | `charon.dkgSidecar.apiEndpoint` | Obol API | `https://api.obol.tech` |
-| `charon.dkgSidecar.image.tag` | Sidecar image (`obolnetwork/charon-dkg-sidecar`); v1.1.0 is needed for `dkg.runner: charon`, `definition` mode and status | `v1.1.0` |
+| `charon.dkgSidecar.image.tag` | Sidecar image (`obolnetwork/charon-dkg-sidecar`); 1.1.0 is needed for `dkg.runner: charon`, `definition` mode and status | `1.1.0` |
 | `configMaps.clusterLock` | Existing `cluster-lock.json` ConfigMap (`mode: lock`) | `""` |
 | `charon.lockHash` | Lock hash for `mode: lockHash` | `""` |
 
