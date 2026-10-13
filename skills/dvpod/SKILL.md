@@ -68,7 +68,7 @@ Choose the route with the `create-cluster-invitation` skill; it hands you `netwo
 ### Required inputs (ask; never invent)
 1. **Network** — `mainnet`, `sepolia`, or `hoodi`. Always pass `--set network=…` (the chart defaults to mainnet).
 2. **Route / mode** and its value: the **operator address** (Launchpad: the exact address that will sign on the Launchpad) or the **config hash / URL / definition file** (direct).
-3. **Beacon node** — a synced beacon API for that network (Obol Stack: `http://ethereum-beacon.ethereum-<id>.svc.cluster.local:5052`). Confirm it is synced before installing; a pod on an unsynced node only runs on the publicnode fallback.
+3. **Beacon node** — a synced beacon API for that network. In the Obol Stack the chart defaults to `http://ethereum-beacon.ethereum-<network>.svc.cluster.local:5052` (the id `obol network install ethereum --network <network>` gives a first deployment); check `obol network list` and set `charon.beaconNodeEndpoints` only if the id differs. Confirm it is synced before installing; a pod on an unsynced node only runs on the publicnode fallback.
 4. **Release name and namespace** — you may propose `dv-pod-<network>` in namespace `dv-pod` and confirm. A release name containing `dv-pod` keeps `<fullname>` = release name.
 5. **Chart version** — always `--version <x.y.z>` explicitly (0.22.0 below). Never let Helm pick "latest".
 

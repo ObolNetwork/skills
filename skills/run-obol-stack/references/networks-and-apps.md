@@ -66,7 +66,7 @@ On a TTY with `--mode archive` set but `--since` omitted, an interactive "Archiv
 - `--mode` and `--since` are **wired only for reth** today. With geth / besu / erigon / nethermind they emit a warning and fall back to the chart's default archive behavior; reach for `--execution-client reth` when the user wants the partial-archive behavior.
 - A bigger window than the user needs is wasted disk; a smaller window than the user needs is a re-sync. Default the conversation to "what's the oldest block your indexer / analysis needs to read?" and choose the next-older preset.
 
-Resulting endpoints (replace `<id>` with the deployment ID from `obol network list`; `-o json` has `deployments[]`):
+Resulting endpoints (replace `<id>` with the deployment ID from `obol network list`; `-o json` has `deployments[]`). The first install of a network gets the network name as its id (`ethereum-mainnet`, `ethereum-hoodi`), and a second one a petname; the dv-pod chart defaults its beacon node to `ethereum-<network>`.
 
 | What | In-cluster (pods, dv-pod, Hermes) | From the host |
 |---|---|---|

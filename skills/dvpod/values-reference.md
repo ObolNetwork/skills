@@ -9,7 +9,7 @@ The values that matter most for `dv-pod` chart **0.22.x** (charon `v1.11.0`). Th
 | `network` | `mainnet`, `sepolia`, `hoodi` (chain ID derived). **Always set explicitly** | `mainnet` |
 | `mode` | How the node joins its cluster — see below | `auto` |
 | `charon.operatorAddress` | Operator wallet that signs on the Launchpad. Required for `mode: launchpad` (and `auto` without lock/definition) | `""` |
-| `charon.beaconNodeEndpoints` | Synced beacon API(s); all are called for every request. **Set it** — the default is a placeholder. Obol Stack: `http://ethereum-beacon.ethereum-<id>.svc.cluster.local:5052` | `[http://l1-full-node-beacon.l1.svc.cluster.local:5052]` |
+| `charon.beaconNodeEndpoints` | Synced beacon API(s); all are called for every request. Empty = the Obol Stack's node for `network` (`http://ethereum-beacon.ethereum-<network>.svc.cluster.local:5052`); **set it** outside the Stack or when the Stack deployment has another id. | `[]` |
 | `charon.fallbackBeaconNodeEndpoints` | Used when the primaries fail | `[]` |
 | `charon.publicnodeFallback` | With no fallbacks set, fall back to publicnode.com's beacon API for `network` | `true` |
 | `image.tag` | Charon version (also runs the DKG with `dkg.runner: charon`) | `v1.11.0` |

@@ -30,18 +30,19 @@ obol helm pull obol/dv-pod --version 0.22.0 --untar --untardir ./dv-pod-chart
 # -> ./dv-pod-chart/dv-pod/values-examples/obol-stack.yaml
 ```
 
-It sets `mode: launchpad`, the in-cluster beacon (`<id>` placeholder), `publicnodeFallback: true`, `builderApi: false`, `serviceMonitor` with `release: monitoring` (the Stack's Prometheus), and `statusReaders` for Hermes (`hermes-obol-agent/hermes`). Override everything that is user-specific on the command line so it's visible:
+It sets `mode: launchpad`, `network: mainnet` (the beacon defaults to the Stack's `ethereum-<network>` node), `publicnodeFallback: true`, `builderApi: false`, `serviceMonitor` with `release: monitoring` (the Stack's Prometheus), and `statusReaders` for Hermes (`hermes-obol-agent/hermes`). Override everything that is user-specific on the command line so it's visible:
 
 ```bash
 obol helm upgrade --install dv-pod-hoodi obol/dv-pod --version 0.22.0 \
   -n dv-pod --create-namespace \
   -f ./dv-pod-chart/dv-pod/values-examples/obol-stack.yaml \
   --set network=hoodi \
-  --set 'charon.beaconNodeEndpoints[0]=http://ethereum-beacon.ethereum-<id>.svc.cluster.local:5052' \
   --set charon.operatorAddress=0xUSER_OPERATOR_ADDRESS \
   --set charon.builderApi=false \
   --timeout=10m
 ```
+
+The beacon node defaults to `ethereum-hoodi`'s. If `obol network list` shows the node under another id (a second install of a network gets a petname), add `--set 'charon.beaconNodeEndpoints[0]=http://ethereum-beacon.ethereum-<id>.svc.cluster.local:5052'`.
 
 That is the Launchpad route, and also step 1 of the direct route: the pod needs to exist to have an ENR, and in Launchpad mode it just waits (`WaitingForInvite`). Once the creator has published the definition containing that ENR, switch the same release to it — the ENR identity is kept on upgrade, and restarting a pod that hasn't done its DKG is harmless:
 
