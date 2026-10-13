@@ -24,7 +24,7 @@ else
 fi
 require curl; require jq
 
-releases_json() { helm list -A --filter '.*dv-pod.*' -o json 2>/dev/null; }
+releases_json() { helm list -A -o json 2>/dev/null | jq '[.[] | select(.chart | startswith("dv-pod-"))]'; }
 
 if [[ -z "$RELEASE" && -z "$NAMESPACE" ]]; then
   rels=$(releases_json | jq -r '.[] | "\(.namespace)/\(.name)"')
