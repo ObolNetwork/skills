@@ -19,7 +19,7 @@ Networks available (verify with `obol network list` to avoid rot): **ethereum** 
 Ethereum install knobs:
 
 - `--network mainnet|sepolia|hoodi`
-- `--execution-client reth|geth|nethermind|besu|erigon|ethereumjs`
+- `--execution-client reth|geth|nethermind|besu|erigon`
 - `--consensus-client lighthouse|prysm|teku|nimbus|lodestar|grandine`
 - `--mode full|archive` *(default `full`)* — see "Full vs. archive" below.
 - `--since <preset|block|duration>` *(reth-only; with `--mode archive`)* — bounds the archive at a historical point so you don't have to keep history all the way back to genesis. See "Partial archive with `--since`" below.
