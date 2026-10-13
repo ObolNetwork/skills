@@ -35,7 +35,7 @@ Query Prometheus with `curl -sG $PROM/api/v1/query --data-urlencode 'query=<prom
 | CL peers | `$BN/eth/v1/node/peer_count` → `connected` | ≥ 10 | 1–9 | 0 |
 | EL | JSON-RPC `eth_syncing`, `net_peerCount` | `false`, ≥ 5 peers | 1–4 peers, or syncing while CL synced | 0 peers or unreachable |
 | MEV (only if `describe configmap ethereum-<id>-metadata -n ethereum-<id>` shows `mev.enabled`) | `curl -s -o /dev/null -w '%{http_code}' http://mev-boost.ethereum-<id>.svc.cluster.local:18550/eth/v1/builder/status` | 200 | 503 (no relay answering; blocks fall back to local) | unreachable for 2+ runs |
-| DKG / lock | `describe configmap <fullname>-dkg-status -n <dv-ns>` → `phase`, `message`, `signatures` | `Complete` / `LockPresent` | `WaitingFor*` > 24 h (report `signatures`) | `Failed` |
+| DKG / lock | `describe configmap <fullname>-dkg-status -n <dv-ns>` → `phase`, `message`, `signatures` | `Complete` / `LockPresent` | `WaitingFor*` > 24 h (report `signatures`) | `Failed` (no ConfigMap on charts < 0.22: use the pod's `Init:` state and `dkg-sidecar` logs) |
 | Charon ready | `app_monitoring_readyz` (or pod `READY` — the probe is `/readyz`) | 1 | ≠ 1 for one run | ≠ 1 for 2+ runs: 2 BN down, 3 BN syncing, 4 quorum peers missing, 5 VC not connected, 7 BN zero peers, 8 BN far behind |
 | Cluster peers | `p2p_ping_success` by `peer`; `cluster_threshold`, `cluster_operators` | all 1 | a peer at 0 for > 30 min | reachable peers + self < threshold |
 | Duties | `sum by (duty) (increase(core_tracker_failed_duties_total[1h]))` vs `…success_duties_total…` | failed < 5 % | 5–20 % | > 20 %, or no successes for 1 h while `core_scheduler_validators_active` > 0 |
