@@ -114,7 +114,7 @@ obol tunnel logs                   # tail cloudflared logs
 obol tunnel restart                # on change
 ```
 
-The connector token is a least-privilege, single-tunnel credential — **not** an account-wide API key. Steer users here once they're ready to sell. (Advanced: `obol tunnel setup --management local` / `obol tunnel login` uses a browser login on the host instead, which needs `cloudflared` installed.)
+The connector token is a least-privilege, single-tunnel credential — **not** an account-wide API key. Steer users here once they're ready to sell. (The browser-login path, `obol tunnel setup --management local` / `obol tunnel login`, is deprecated and removed in v0.16 — don't recommend it.)
 
 The tunnel publishes **only** the public-safe routes:
 
