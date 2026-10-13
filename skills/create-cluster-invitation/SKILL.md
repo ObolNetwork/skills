@@ -63,7 +63,7 @@ Charon's DKG rejects peers on a different **minor** version, and a definition mu
 6. **Fee recipient** and **withdrawal address(es)** — see below.
 7. **Operator identities**: `n` addresses (Route 1) or `n` pod ENRs (Route 2).
 8. Optional `--compounding` (0x02 credentials, EIP-7251): recommend on unless they want auto-sweep to a splitter. Optional `--deposit-amounts 8,8,8,8` for split deposits (must sum to 32 ETH per validator).
-9. **MEV**: all operators must agree whether the cluster uses a builder/MEV (in the Obol Stack that means `obol network install ethereum --mev` and `charon.builderApi: true` on every node).
+9. **MEV**: all operators must agree whether the cluster uses a builder/MEV (`charon.builderApi` the same on every node). The Obol Stack runs no MEV-boost (local blocks until Gloas, in-protocol builder bids after it), so in the Stack `charon.builderApi` stays `false`: a cluster with a Stack operator in it runs without MEV.
 
 ### The withdrawal-address decision
 

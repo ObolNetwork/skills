@@ -70,7 +70,7 @@ Secret precedence: `existingSecret.name` → the Secret the release already moun
 | Value | Description | Default |
 |-------|-------------|---------|
 | `charon.nickname` | Name in monitoring and peers' logs (≤ 32 chars) | `""` |
-| `charon.builderApi` | MEV/builder proposals. Needs a builder on the beacon node — in the Stack only with `obol network install ethereum --mev` | `true` |
+| `charon.builderApi` | MEV/builder proposals. Needs a builder (MEV-boost) on the beacon node; the Obol Stack has none, so `false` there | `true` |
 | `charon.featureSet` / `featureSetEnable` / `featureSetDisable` | Feature gates | `stable` / `""` / `""` |
 | `charon.logLevel` / `logFormat` | Logging | `info` / `json` |
 | `charon.lokiAddresses` / `lokiService` | Push logfmt logs to Loki | `""` |

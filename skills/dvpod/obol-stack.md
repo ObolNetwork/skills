@@ -19,7 +19,7 @@ Use this when the dv-pod goes into an Obol Stack (k3d cluster managed by the `ob
    If 0.22.0 is missing or the tag check isn't `200`, the pod would sit in `ErrImagePull`: tell the user the Stack flow is **pending that release**. The interim option is the newest published chart < 0.22 in Launchpad mode only (no `mode`/`dkg.*`/`statusReaders`; read the public ENR from the ENR Secret's `enr` field; Hermes sees pods and logs but not DKG status; the DKG runs with the sidecar's bundled charon, so confirm its version with the other operators). Don't mix: every operator in one cluster should be on the same route and charon minor.
 2. **Node synced.** `obol network status ethereum/<id>` must say `synced` (see `run-obol-stack`). Only on a testnet, and only if the user explicitly accepts it, may you install earlier and let `charon.publicnodeFallback` carry the pod; say that mainnet duties must never depend on publicnode.
 3. **Inputs from the user**: `network` (must equal the node's network), the operator address (Launchpad route; never invent it), and the route from `create-cluster-invitation` (Launchpad, or a config hash / URL / definition file for the direct route).
-4. **MEV**: `obol network list` shows whether the node runs mev-boost. Set `charon.builderApi=true` if and only if it does (the example file defaults to `false`).
+4. **No MEV**: The Obol Stack runs no MEV-boost (local blocks until Gloas, in-protocol builder bids after it), so in the Stack `charon.builderApi` stays `false` (the example file sets it). The whole cluster must agree, so tell the user before they join a cluster that runs MEV.
 
 ## Install
 

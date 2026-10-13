@@ -72,7 +72,7 @@ Choose the route with the `create-cluster-invitation` skill; it hands you `netwo
 4. **Release name and namespace** — you may propose `dv-pod-<network>` in namespace `dv-pod` and confirm. A release name containing `dv-pod` keeps `<fullname>` = release name.
 5. **Chart version** — always `--version <x.y.z>` explicitly (0.22.0 below). Never let Helm pick "latest".
 
-Optional: validator client type (`lighthouse` default; teku, prysm, nimbus, lodestar), `charon.builderApi` (true only if the beacon node has a builder/MEV-boost; must match the cluster), `charon.nickname`, monitoring (`serviceMonitor`, `centralMonitoring`, `charon.lokiAddresses` — see values-reference).
+Optional: validator client type (`lighthouse` default; teku, prysm, nimbus, lodestar), `charon.builderApi` (true only if the beacon node has a builder/MEV-boost; must match the cluster; always false in the Obol Stack), `charon.nickname`, monitoring (`serviceMonitor`, `centralMonitoring`, `charon.lokiAddresses` — see values-reference).
 
 ### Launchpad route
 
