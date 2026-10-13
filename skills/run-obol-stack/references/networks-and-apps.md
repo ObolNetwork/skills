@@ -66,13 +66,44 @@ On a TTY with `--mode archive` set but `--since` omitted, an interactive "Archiv
 - `--mode` and `--since` are **wired only for reth** today. With geth / besu / erigon / nethermind they emit a warning and fall back to the chart's default archive behavior; reach for `--execution-client reth` when the user wants the partial-archive behavior.
 - A bigger window than the user needs is wasted disk; a smaller window than the user needs is a re-sync. Default the conversation to "what's the oldest block your indexer / analysis needs to read?" and choose the next-older preset.
 
-Resulting endpoints (replace `{id}` with the deployment ID they chose):
+Resulting endpoints (replace `<id>` with the deployment ID; `obol network list` shows installed nodes on recent CLIs, `obol kubectl get ns | grep ethereum-` always works):
 
-- Execution RPC: `http://obol.stack/ethereum-{id}/execution`
-- Beacon API: `http://obol.stack/ethereum-{id}/beacon`
-- Unified eRPC (load-balances across installed execution deployments): `http://obol.stack/rpc`
+| What | In-cluster (pods, dv-pod, Hermes) | From the host |
+|---|---|---|
+| Execution JSON-RPC | `http://ethereum-execution.ethereum-<id>.svc.cluster.local:8545` | `obol kubectl port-forward -n ethereum-<id> svc/ethereum-execution 8545:8545` |
+| Beacon API | `http://ethereum-beacon.ethereum-<id>.svc.cluster.local:5052` | `obol kubectl port-forward -n ethereum-<id> svc/ethereum-beacon 5052:5052` |
+| Unified eRPC (chain data, load-balanced) | `http://erpc.erpc.svc.cluster.local/rpc/<network>` | `http://obol.stack/rpc/<network>` |
 
-From inside pods use the cluster-internal DNS instead — `obol.stack` only resolves on the host (see the DNS gotcha in the main SKILL.md).
+There are no per-node `obol.stack/ethereum-<id>/…` routes; port-forward to talk to one node directly. Each network namespace also has an `ethereum-<id>-metadata` ConfigMap listing its endpoints. `obol.stack` only resolves on the host (see the DNS gotcha in the main SKILL.md).
+
+### Is the node synced?
+
+A DV (or anything validating) needs a node that is **synced**, which means all of:
+
+- **EL**: `eth_syncing` returns `false`, and `net_peerCount` > 0.
+- **CL**: `/eth/v1/node/syncing` has `is_syncing: false`, `is_optimistic: false`, `el_offline: false`, and `sync_distance` ≤ 2 slots; `/eth/v1/node/peer_count` `connected` > 0.
+
+Check it, in order of preference:
+
+1. `obol network status` — if this CLI prints a per-node section (EL/CL sync, peers, a `synced`/`syncing`/`el_offline` verdict), use it; `-o json` for scripting. Older CLIs show only eRPC health there.
+2. Probe the APIs through port-forwards (run each forward in the background, then):
+   ```bash
+   curl -s localhost:5052/eth/v1/node/syncing | jq .data
+   curl -s localhost:5052/eth/v1/node/peer_count | jq .data.connected
+   curl -s -X POST localhost:8545 -H 'content-type: application/json' \
+     -d '{"jsonrpc":"2.0","id":1,"method":"eth_syncing","params":[]}' | jq .result
+   ```
+3. Pods: `obol kubectl get pods -n ethereum-<id>` — both clients `Running` with few restarts.
+
+While syncing, report progress (CL `head_slot` + `sync_distance`, EL `currentBlock`/`highestBlock`) and an honest ETA rather than polling silently. An EL with `eth_syncing=false` at block 0 is waiting for the CL, not synced.
+
+### Sizing for a validating node
+
+Use `--mode full`. Mainnet: ≥2 TB fast SSD free (EL ~1 TB and growing, CL ~200 GB), 16–32 GB RAM, 4+ cores. Hoodi/sepolia: ~300 GB. The node's PVC sizes (mainnet 500Gi EL / 200Gi CL; testnets 100Gi / 50Gi) are not enforced by local-path storage — the host disk is what fills up.
+
+### MEV (opt-in)
+
+`obol network install ethereum --mev` (recent CLIs; check `--help`) adds mev-boost in the network namespace and points the CL's builder API at it, with a vetted relay list per network (`--mev-relays` to choose your own — relay choice has censorship/trust trade-offs). Without it there is no builder path, so a dv-pod on this node must run with `charon.builderApi: false`. A whole DV cluster must agree on MEV on/off — ask the cluster's operators before choosing.
 
 ## Deploy your own service (the `obol-app` chart)
 
