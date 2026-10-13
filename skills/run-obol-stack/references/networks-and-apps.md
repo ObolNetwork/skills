@@ -9,7 +9,7 @@ Load this file when the user is doing infra work that isn't the agent commerce l
 Two-stage model: **install** (save config) then **sync** (deploy).
 
 ```bash
-obol network list                                     # what's available
+obol network list                                     # installed nodes (type/id, network, EL/CL, mode, MEV) + installable types
 obol network install ethereum --network=hoodi --id demo   # config only
 obol network sync ethereum/demo                       # deploys to the cluster
 ```
@@ -66,7 +66,7 @@ On a TTY with `--mode archive` set but `--since` omitted, an interactive "Archiv
 - `--mode` and `--since` are **wired only for reth** today. With geth / besu / erigon / nethermind they emit a warning and fall back to the chart's default archive behavior; reach for `--execution-client reth` when the user wants the partial-archive behavior.
 - A bigger window than the user needs is wasted disk; a smaller window than the user needs is a re-sync. Default the conversation to "what's the oldest block your indexer / analysis needs to read?" and choose the next-older preset.
 
-Resulting endpoints (replace `<id>` with the deployment ID; `obol network list` shows installed nodes on recent CLIs, `obol kubectl get ns | grep ethereum-` always works):
+Resulting endpoints (replace `<id>` with the deployment ID from `obol network list`; `-o json` has `deployments[]`):
 
 | What | In-cluster (pods, dv-pod, Hermes) | From the host |
 |---|---|---|
@@ -74,7 +74,7 @@ Resulting endpoints (replace `<id>` with the deployment ID; `obol network list` 
 | Beacon API | `http://ethereum-beacon.ethereum-<id>.svc.cluster.local:5052` | `obol kubectl port-forward -n ethereum-<id> svc/ethereum-beacon 5052:5052` |
 | Unified eRPC (chain data, load-balanced) | `http://erpc.erpc.svc.cluster.local/rpc/<network>` | `http://obol.stack/rpc/<network>` |
 
-There are no per-node `obol.stack/ethereum-<id>/…` routes; port-forward to talk to one node directly. Each network namespace also has an `ethereum-<id>-metadata` ConfigMap listing its endpoints. `obol.stack` only resolves on the host (see the DNS gotcha in the main SKILL.md).
+The EL/CL ServiceMonitors carry `release: monitoring`, so the Stack's Prometheus (`monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090`) scrapes both clients. There are no per-node `obol.stack/ethereum-<id>/…` routes; port-forward to talk to one node directly. Each network namespace also has an `ethereum-<id>-metadata` ConfigMap listing its endpoints. `obol.stack` only resolves on the host (see the DNS gotcha in the main SKILL.md).
 
 ### Is the node synced?
 
@@ -85,8 +85,8 @@ A DV (or anything validating) needs a node that is **synced**, which means all o
 
 Check it, in order of preference:
 
-1. `obol network status` — if this CLI prints a per-node section (EL/CL sync, peers, a `synced`/`syncing`/`el_offline` verdict), use it; `-o json` for scripting. Older CLIs show only eRPC health there.
-2. Probe the APIs through port-forwards (run each forward in the background, then):
+1. `obol network status ethereum/<id>` (or no argument for every node): pods, EL (`eth_syncing`, head, peers, version), CL (syncing, peers, version), mev-boost health and a verdict — `synced`, `syncing` (with progress), `waiting`, `degraded`, `el_offline`, `unreachable`, `not_deployed`. Gate on `synced` with no peer warnings; `obol -o json network status ethereum/<id>` → `.nodes[].verdict` for scripting. (CLIs before v0.16 show only eRPC health here; fall back to step 2.)
+2. Probe the APIs yourself through port-forwards (`obol kubectl -n ethereum-<id> port-forward svc/ethereum-beacon 5052:5052 &`, same for `svc/ethereum-execution 8545:8545`), then:
    ```bash
    curl -s localhost:5052/eth/v1/node/syncing | jq .data
    curl -s localhost:5052/eth/v1/node/peer_count | jq .data.connected
@@ -103,7 +103,7 @@ Use `--mode full`. Mainnet: ≥2 TB fast SSD free (EL ~1 TB and growing, CL ~200
 
 ### MEV (opt-in)
 
-`obol network install ethereum --mev` (recent CLIs; check `--help`) adds mev-boost in the network namespace and points the CL's builder API at it, with a vetted relay list per network (`--mev-relays` to choose your own — relay choice has censorship/trust trade-offs). Without it there is no builder path, so a dv-pod on this node must run with `charon.builderApi: false`. A whole DV cluster must agree on MEV on/off — ask the cluster's operators before choosing.
+`obol network install ethereum --mev [--mev-relays 'https://0x<pubkey>@<host>,…']` runs mev-boost (`mev-boost:18550`) in the node's namespace and wires the CL's builder flag to it, with a vetted relay list per network by default (relay choice has censorship/trust trade-offs). Re-installing without `--mev` and syncing removes it. `obol network list` shows whether a node has MEV; the `ethereum-<id>-metadata` ConfigMap (`metadata.json` → `.mev.enabled`, `.builderEndpoint`, `.relays`) records it too. **A dv-pod on this node sets `charon.builderApi: true` if and only if MEV is enabled here** — with no builder path, proposals fall back to local blocks with warnings. A whole DV cluster must agree on MEV on/off — ask the cluster's operators before choosing.
 
 ## Deploy your own service (the `obol-app` chart)
 
