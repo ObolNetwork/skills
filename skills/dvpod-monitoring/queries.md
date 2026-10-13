@@ -90,19 +90,19 @@ max by (name, severity, description) (
 
 ```bash
 # Recent charon errors / warnings
-kubectl logs -n <ns> <pod> -c charon --since=15m | grep -iE 'error|warn'
+kubectl logs -n <ns> <pod> -c dv-pod --since=15m | grep -iE 'error|warn'
 
 # Filter charon by component (logs are JSON when logFormat=json, the default)
-kubectl logs -n <ns> <pod> -c charon --since=15m | jq -c 'select(.component=="p2p" and .level=="error")'
+kubectl logs -n <ns> <pod> -c dv-pod --since=15m | jq -c 'select(.component=="p2p" and .level=="error")'
 
 # Lines around a specific slot
-kubectl logs -n <ns> <pod> -c charon --since=1h | grep 'slot=12345678'
+kubectl logs -n <ns> <pod> -c dv-pod --since=1h | grep 'slot=12345678'
 
 # Validator client missed duties
 kubectl logs -n <ns> <pod> -c validator-client --since=15m | grep -i 'missed\|fail'
 
 # Tail across all replicas of a release
-kubectl logs -n <ns> -l app.kubernetes.io/instance=<release> -c charon --tail=100 --prefix
+kubectl logs -n <ns> -l app.kubernetes.io/instance=<release> -c dv-pod --tail=100 --prefix
 ```
 
 ## LogQL — for users with Charon shipping to Loki

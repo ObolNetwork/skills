@@ -8,7 +8,7 @@ description: |
   Grafana with cross-cluster fleet view, use the `obol-monitoring` skill.
 user-invocable: true
 disable-model-invocation: false
-allowed-tools: Read, Grep, Glob, Bash(kubectl get pods *), Bash(kubectl get pod *), Bash(kubectl get svc *), Bash(kubectl get pvc *), Bash(kubectl get jobs *), Bash(kubectl get events *), Bash(kubectl get prometheus *), Bash(kubectl logs *), Bash(kubectl port-forward *), Bash(helm list *), Bash(helm get values *), Bash(curl -sG http://localhost:*), Bash(curl -s localhost:*), Bash(bash *dvpod-monitoring/health.sh*)
+allowed-tools: Read, Grep, Glob, Bash(kubectl get pods *), Bash(kubectl get pod *), Bash(kubectl get svc *), Bash(kubectl get pvc *), Bash(kubectl get jobs *), Bash(kubectl get events *), Bash(kubectl get prometheus *), Bash(kubectl logs *), Bash(kubectl port-forward *), Bash(helm list *), Bash(helm get values *), Bash(obol kubectl get *), Bash(obol kubectl logs *), Bash(obol kubectl port-forward *), Bash(obol helm list *), Bash(obol helm get values *), Bash(curl -sG http://localhost:*), Bash(curl -s localhost:*), Bash(bash *dvpod-monitoring/health.sh*), Bash(OBOL=1 bash *dvpod-monitoring/health.sh*)
 argument-hint: "[query type] [release] — e.g. health my-dv-pod, errors, peers, duties, logs"
 ---
 
@@ -26,6 +26,8 @@ You investigate the health and behavior of a running DVpod by querying its metri
 
 For namespace, release, pod, and current-values discovery, read [`skills/dvpod/discovery.md`](../dvpod/discovery.md).
 
+**Obol Stack:** prefix every `kubectl` / `helm` below with `obol` (`obol kubectl …`, `obol helm …`) — never the user's default kubeconfig — and run the health script with `OBOL=1`. A dv-pod installed from the chart's `values-examples/obol-stack.yaml` is scraped by the Stack's Prometheus (`monitoring/monitoring-kube-prometheus-prometheus:9090`, via a ServiceMonitor labelled `release: monitoring`); filter its queries with `{namespace="<ns>",service="<release>"}`. For DKG progress read the `<fullname>-dkg-status` ConfigMap (`phase`, `message`, `signatures`) instead of logs. EL/CL health: `obol network status ethereum/<id>`.
+
 ## Pre-flight: detect what is wired up
 
 Before any query, decide which path applies for **metrics** and **logs** by reading the release's current values:
@@ -41,7 +43,7 @@ helm get values <release> -n <namespace> -o json
    kubectl get svc prometheus -n <namespace>
    ```
    Query path: port-forward `svc/prometheus 9090` and hit the standard Prometheus HTTP API.
-2. **Cluster Prometheus via ServiceMonitor** — `serviceMonitor.enabled=true`. Auto-discover a Prometheus the operator manages:
+2. **Cluster Prometheus via ServiceMonitor** — `serviceMonitor.enabled=true` (the Obol Stack's default for dv-pods: `monitoring/monitoring-kube-prometheus-prometheus`). Otherwise auto-discover a Prometheus the operator manages:
    ```bash
    kubectl get prometheus -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}' 2>/dev/null
    kubectl get svc -A -l app.kubernetes.io/name=prometheus 2>/dev/null
@@ -80,7 +82,8 @@ bash ${CLAUDE_SKILL_DIR}/health.sh [release] [namespace]
 
 - With no args, auto-detects the release if exactly one DVpod is deployed.
 - With release only, looks up the namespace via `helm list -A`.
-- Requires `centralMonitoring.enabled=true` (bundled Prometheus). Errors out with guidance if not.
+- Uses the bundled Prometheus (`centralMonitoring.enabled=true`) or, with `serviceMonitor.enabled=true`, the Obol Stack's Prometheus (scoped to this release). Errors out with guidance if neither applies.
+- In the Obol Stack: `OBOL=1 bash ${CLAUDE_SKILL_DIR}/health.sh [release] [namespace]` (uses `obol kubectl` / `obol helm`).
 - Exits non-zero only on infra failures (missing tools, Prometheus port-forward fails, etc.) — not on degraded health. Always show the script's stdout to the user.
 
 Use this for **all** routine `/dvpod-monitoring health` invocations. Fall through to the per-query path below only when the user asks for something the snapshot doesn't cover (custom PromQL, deep log search, specific incident windows).
@@ -120,17 +123,17 @@ curl -s localhost:3620/metrics | grep -E '^(app_monitoring_readyz|core_scheduler
 ### Logs via `kubectl logs`
 
 ```bash
-# Recent charon log lines
-kubectl logs -n <namespace> <pod> -c charon --tail=200
+# Recent charon log lines (the charon container is named `dv-pod` on current charts, `charon` on old ones)
+kubectl logs -n <namespace> <pod> -c dv-pod --tail=200
 
 # Errors in last 15 minutes
-kubectl logs -n <namespace> <pod> -c charon --since=15m | grep -iE 'error|warn'
+kubectl logs -n <namespace> <pod> -c dv-pod --since=15m | grep -iE 'error|warn'
 
 # Validator client logs
 kubectl logs -n <namespace> <pod> -c validator-client --since=15m
 
 # Across replicas in a release (if the StatefulSet has more than one pod)
-kubectl logs -n <namespace> -l app.kubernetes.io/instance=<release> -c charon --tail=100 --prefix
+kubectl logs -n <namespace> -l app.kubernetes.io/instance=<release> -c dv-pod --tail=100 --prefix
 ```
 
 ### Logs via LogQL (only if Loki is reachable)
