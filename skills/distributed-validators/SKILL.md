@@ -7,7 +7,7 @@ description: "Monitor distributed validator clusters via the Obol API. Use when 
 
 Monitor distributed validator (DV) clusters using the Obol API. Check cluster health, validator performance, operator status, and exit progress.
 
-To deploy or operate a DV on Kubernetes use the `dvpod` skill; for fleet-wide health in Obol's hosted Grafana use `obol-monitoring` (both in this plugin).
+To deploy or operate a DV on Kubernetes use the `dvpod` skill; for fleet-wide health in Obol's hosted Grafana use `obol-monitoring` (both in this plugin). To watch this Obol Stack's own node and dv-pods (sync, peers, readiness, duties, on a cron) use `dv-steward`.
 
 A distributed validator splits signing across multiple operators so no single party holds the full key. Obol's middleware (Charon) coordinates this. A cluster has N operators with a threshold (e.g. 3-of-4) needed to sign.
 
@@ -23,6 +23,7 @@ A distributed validator splits signing across multiple operators so no single pa
 - Creating clusters or running DKG (write operations)
 - Ethereum RPC queries — use `ethereum-networks`
 - Kubernetes diagnostics — use `obol-stack`
+- Watching the local EL/CL and dv-pods in this Stack — use `dv-steward`
 
 ## API Base
 
@@ -96,7 +97,7 @@ curl -s "https://api.obol.tech/v1/lock/search/mainnet?q=..."
 curl -s "https://api.obol.tech/v1/address/network/mainnet"
 ```
 
-Networks: `mainnet`, `hoodi`, `holesky`, `sepolia`
+Networks: `mainnet`, `hoodi`, `sepolia` (`holesky` is deprecated)
 
 ## Common Workflows
 
@@ -158,3 +159,4 @@ See `references/api-examples.md` for response shapes and field reference.
 
 - `ethereum-networks` — blockchain RPC queries (validator balances, beacon chain data)
 - `obol-stack` — Kubernetes cluster monitoring (pod status, logs)
+- `dv-steward` — stewardship of this Stack's own DV node; gives you the `lockHash` (from the dv-pod's `<fullname>-dkg-status` ConfigMap) to query here
