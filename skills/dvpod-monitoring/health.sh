@@ -3,6 +3,9 @@
 # Usage: health.sh [release] [namespace]
 #   - With no args: auto-detects if there is exactly one dv-pod release.
 #   - With release only: looks up its namespace via helm.
+#   - OBOL=1: run kubectl/helm through `obol kubectl` / `obol helm` (Obol Stack).
+# Metrics come from the bundled Prometheus (centralMonitoring.enabled) or, with
+# serviceMonitor.enabled, the Obol Stack's Prometheus (monitoring namespace).
 
 set -euo pipefail
 
@@ -12,9 +15,16 @@ NAMESPACE="${2:-}"
 require() {
   command -v "$1" >/dev/null 2>&1 || { echo "ERROR: '$1' not found in PATH" >&2; exit 1; }
 }
-require helm; require kubectl; require curl; require jq
+if [[ "${OBOL:-}" == "1" ]]; then
+  require obol
+  kubectl() { obol kubectl "$@"; }
+  helm() { obol helm "$@"; }
+else
+  require helm; require kubectl
+fi
+require curl; require jq
 
-releases_json() { helm list -A --filter '.*dv-pod.*' -o json 2>/dev/null; }
+releases_json() { helm list -A -o json 2>/dev/null | jq '[.[] | select(.chart | startswith("dv-pod-"))]'; }
 
 if [[ -z "$RELEASE" && -z "$NAMESPACE" ]]; then
   rels=$(releases_json | jq -r '.[] | "\(.namespace)/\(.name)"')
@@ -40,6 +50,7 @@ echo
 
 values=$(helm get values "$RELEASE" -n "$NAMESPACE" -o json)
 central=$(echo "$values" | jq -r '.centralMonitoring.enabled // false')
+svcmon=$(echo "$values" | jq -r '.serviceMonitor.enabled // false')
 nickname=$(echo "$values" | jq -r '.charon.nickname // ""')
 bns=$(echo "$values" | jq -r '.charon.beaconNodeEndpoints[]?' | paste -sd, -)
 fbns=$(echo "$values" | jq -r '.charon.fallbackBeaconNodeEndpoints[]?' | paste -sd, -)
@@ -49,17 +60,31 @@ echo "- nickname: ${nickname:-<unset>}"
 echo "- beaconNodeEndpoints: ${bns:-<none>}"
 [[ -n "$fbns" ]] && echo "- fallbackBeaconNodeEndpoints: $fbns"
 echo "- centralMonitoring.enabled: $central"
+echo "- serviceMonitor.enabled: $svcmon"
 
-if [[ "$central" != "true" ]]; then
+# SEL scopes queries to this release when the Prometheus scrapes more than one.
+SEL=""
+# Charts >= 0.21 name the bundled Prometheus Service <fullname>-prometheus (older: prometheus);
+# <fullname> is the release name if it contains "dv-pod", else <release>-dv-pod.
+if [[ "$RELEASE" == *dv-pod* ]]; then FULLNAME="$RELEASE"; else FULLNAME="$RELEASE-dv-pod"; fi
+if [[ "$central" == "true" ]]; then
+  PROM_NS="$NAMESPACE"; PROM_SVC="prometheus"
+  kubectl get svc -n "$NAMESPACE" "$FULLNAME-prometheus" >/dev/null 2>&1 && PROM_SVC="$FULLNAME-prometheus"
+elif [[ "$svcmon" == "true" ]] && kubectl get svc -n monitoring monitoring-kube-prometheus-prometheus >/dev/null 2>&1; then
+  PROM_NS="monitoring"; PROM_SVC="monitoring-kube-prometheus-prometheus"
+  SEL="{namespace=\"$NAMESPACE\",service=\"$RELEASE\"}"
+  echo "- metrics: Obol Stack Prometheus (monitoring/$PROM_SVC), selector $SEL"
+else
   echo
-  echo "ERROR: centralMonitoring is not enabled. This script targets the bundled Prometheus path." >&2
-  echo "       Enable it via the dvpod skill, or query charon :3620 directly for spot checks." >&2
+  echo "ERROR: no Prometheus scrapes this release (centralMonitoring and serviceMonitor are off," >&2
+  echo "       or the ServiceMonitor's Prometheus was not found). Enable one via the dvpod skill," >&2
+  echo "       or query charon :3620 directly for spot checks." >&2
   exit 2
 fi
 
 LPORT=$(( RANDOM % 10000 + 30000 ))
 PFLOG=$(mktemp)
-kubectl port-forward -n "$NAMESPACE" svc/prometheus "${LPORT}:9090" >"$PFLOG" 2>&1 &
+kubectl port-forward -n "$PROM_NS" "svc/$PROM_SVC" "${LPORT}:9090" >"$PFLOG" 2>&1 &
 PF_PID=$!
 trap 'kill "$PF_PID" 2>/dev/null || true; rm -f "$PFLOG"' EXIT
 
@@ -76,8 +101,8 @@ fi
 PROM="http://localhost:${LPORT}"
 q() { curl -sG "$PROM/api/v1/query" --data-urlencode "query=$1"; }
 
-readyz=$(q 'app_monitoring_readyz' | jq -r '.data.result[0].value[1] // "no-data"')
-active=$(q 'core_scheduler_validators_active' | jq -r '.data.result[0].value[1] // "no-data"')
+readyz=$(q "app_monitoring_readyz$SEL" | jq -r '.data.result[0].value[1] // "no-data"')
+active=$(q "core_scheduler_validators_active$SEL" | jq -r '.data.result[0].value[1] // "no-data"')
 
 echo
 echo "### Health"
@@ -87,19 +112,19 @@ echo "- core_scheduler_validators_active: $active"
 echo
 echo "### readyz histogram, last 30m"
 curl -sG "$PROM/api/v1/query_range" \
-  --data-urlencode 'query=app_monitoring_readyz' \
+  --data-urlencode "query=app_monitoring_readyz$SEL" \
   --data-urlencode "start=$(( $(date -u +%s) - 1800 ))" \
   --data-urlencode "end=$(date -u +%s)" \
   --data-urlencode 'step=60s' \
   | jq -r '[.data.result[0].values[]?[1]] | group_by(.) | map("  code=\(.[0]) count=\(length)") | .[]'
 
 echo
-self=$(q 'app_monitoring_readyz' | jq -r '.data.result[0].metric.cluster_peer // "unknown"')
+self=$(q "app_monitoring_readyz$SEL" | jq -r '.data.result[0].metric.cluster_peer // "unknown"')
 echo "### Peers (this node: $self${nickname:+ / nickname=$nickname})"
 
-peers_all=$(q 'p2p_peer_connection_types' | jq -r '.data.result[].metric.peer' | sort -u)
-ping_kv=$(q 'p2p_ping_success' | jq -r '.data.result[] | "\(.metric.peer) \(.value[1])"')
-conn_kv=$(q 'p2p_peer_connection_types' | jq -r '.data.result[] | "\(.metric.peer) \(.metric.type) \(.value[1])"')
+peers_all=$(q "p2p_peer_connection_types$SEL" | jq -r '.data.result[].metric.peer' | sort -u)
+ping_kv=$(q "p2p_ping_success$SEL" | jq -r '.data.result[] | "\(.metric.peer) \(.value[1])"')
+conn_kv=$(q "p2p_peer_connection_types$SEL" | jq -r '.data.result[] | "\(.metric.peer) \(.metric.type) \(.value[1])"')
 
 remote_seen=0
 while read -r p; do
@@ -129,8 +154,8 @@ fi
 
 echo
 echo "### Beacon nodes seen by charon"
-q 'app_beacon_node_version' | jq -r '.data.result[]? | "  - \(.metric.version)"'
-echo "  peers reported by one BN: $(q 'app_beacon_node_peers' | jq -r '.data.result[0].value[1] // "no-data"')"
+q "app_beacon_node_version$SEL" | jq -r '.data.result[]? | "  - \(.metric.version)"'
+echo "  peers reported by one BN: $(q "app_beacon_node_peers$SEL" | jq -r '.data.result[0].value[1] // "no-data"')"
 
 echo
 echo "### Recent charon errors/warns (last 15m, deduped)"

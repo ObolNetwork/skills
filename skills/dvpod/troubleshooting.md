@@ -2,9 +2,12 @@
 
 ## Diagnostic Checklist
 
-Run these in order when troubleshooting a DVpod deployment:
+Run these in order when troubleshooting a DVpod deployment (Obol Stack: prefix with `obol`):
 
 ```bash
+# 0. Where is it? (charts >= 0.22)
+kubectl get configmap <fullname>-dkg-status -n <ns> -o jsonpath='{.data.phase}{"\n"}{.data.message}{"\n"}'
+
 # 1. Check pod status
 kubectl get pods -n <ns> -l app.kubernetes.io/instance=<release> -o wide
 
@@ -13,13 +16,14 @@ kubectl get events -n <ns> --sort-by='.lastTimestamp' --field-selector involvedO
 
 # 3. Check ENR job completion
 kubectl get jobs -n <ns> -l app.kubernetes.io/instance=<release>
-kubectl logs job/<release>-dv-pod-enr-job -n <ns>
+kubectl logs job/<fullname>-enr-job -n <ns>
 
-# 4. Check DKG sidecar
+# 4. Check DKG sidecar, then the DKG ceremony (dkg.runner: charon)
 kubectl logs -n <ns> <pod> -c dkg-sidecar --tail=50
+kubectl logs -n <ns> <pod> -c charon-dkg --tail=50
 
-# 5. Check Charon
-kubectl logs -n <ns> <pod> -c charon --tail=50
+# 5. Check Charon (container named dv-pod)
+kubectl logs -n <ns> <pod> -c dv-pod --tail=50
 
 # 6. Check validator client
 kubectl logs -n <ns> <pod> -c validator-client --tail=50
@@ -27,16 +31,17 @@ kubectl logs -n <ns> <pod> -c validator-client --tail=50
 # 7. Check PVCs
 kubectl get pvc -n <ns> -l app.kubernetes.io/instance=<release>
 
-# 8. Check secrets exist
-kubectl get secrets -n <ns> | grep -E "enr|charon"
+# 8. Check the ENR ConfigMap (public) — it names the Secret in .data.secretName
+kubectl get configmap <fullname>-enr -n <ns> -o jsonpath='{.data.enr}{"\n"}{.data.secretName}{"\n"}'
 ```
 
 ## Common Issues
 
 ### Interpreting Results Quickly
 
-- DKG sidecar polling is normal right after deploy; persistent polling usually means Launchpad/operator mismatch or pending signatures.
-- Missing `/charon-data/cluster-lock.json` means DKG has not completed yet.
+- `WaitingForInvite` / `WaitingForSignatures` are normal until every operator has signed; persistent `WaitingForInvite` usually means an operator-address or ENR mismatch.
+- `DefinitionReady` / `RunningDKG` that don't move: other operators' pods aren't online, or run a different charon minor.
+- Phase not `Complete` / `LockPresent` (or, on charts < 0.22, no `/charon-data/cluster-lock.json`) means the DKG has not completed.
 - Charon restart loops with beacon errors usually indicate bad/unreachable `charon.beaconNodeEndpoints`.
 - Healthy pods but no DKG progress usually means external coordination (other operators) is incomplete.
 
@@ -68,10 +73,7 @@ kubectl get secrets -n <ns> | grep -E "enr|charon"
   kubectl get role,rolebinding -n <ns> | grep enr
   ```
 - **Image pull failure:** Check if the charon image is accessible.
-- **Secret already exists with wrong keys:** The secret must have keys `charon-enr-private-key` and `enr`.
-  ```bash
-  kubectl get secret charon-enr-private-key -n <ns> -o json | jq '.data | keys'
-  ```
+- **"refusing to overwrite"**: the ENR Secret exists without the private-key field. The job never overwrites an identity; fix or (only if this identity is in no cluster) delete the Secret. Key names: `charon-enr-private-key` and `enr` (or `charon.enr.existingSecret.*DataKey`). Don't inspect the Secret yourself; ask the user to check which data keys it has.
 
 ### DKG Sidecar Polling Forever
 
@@ -79,57 +81,39 @@ kubectl get secrets -n <ns> | grep -E "enr|charon"
 but say "No invite found" for all of them.
 
 **Causes & Fixes:**
+- **ENR mismatch:** the operator pasted an ENR on the Launchpad that isn't this pod's (e.g. one generated on a laptop). Compare the pod's `<fullname>-enr` ConfigMap with the ENR in the definition.
 - **Operator address mismatch (most common):** Each release's `charon.operatorAddress` must exactly
   match the address assigned to that node's ENR on the Launchpad. For group clusters, each node
   typically has a different operator address. Verify with:
   ```bash
   helm get values <release> -n <ns> | grep operatorAddress
   ```
-  Fix: `helm upgrade <release> obol/dv-pod -n <ns> --version <current-chart-version> --reuse-values --set charon.operatorAddress=<correct-address>`
-  then restart the pod: `kubectl delete pod <pod> -n <ns>`
+  Fix (DKG not done yet, so restarting is harmless): `helm upgrade <release> obol/dv-pod -n <ns> --version <current-chart-version> --reuse-values --set charon.operatorAddress=<correct-address>` (the upgrade restarts the pod).
 - **Cluster not fully confirmed:** ALL operators must accept/sign on the Launchpad before the
   sidecar will detect the invite. Check the Launchpad cluster page to see which operators are pending.
-- **Solo cluster (not supported):** The DKG sidecar auto-discovery only works with group clusters.
-  Solo cluster flows on the Launchpad use a different mechanism.
+- **Solo cluster:** Launchpad mode only finds group-cluster invites. For one person running every node, use the direct route (`mode: definition`).
 - **Wrong targetConfigHash:** If set, verify it matches the cluster on Launchpad.
 - **API connectivity:** Check if the pod can reach `api.obol.tech`.
   ```bash
-  kubectl exec -n <ns> <pod> -c dkg-sidecar -- wget -qO- https://api.obol.tech/health 2>&1 || echo "Cannot reach API"
+  kubectl run -n <ns> api-check --rm -it --restart=Never --image=curlimages/curl -- curl -s https://api.obol.tech/v1/_health
   ```
 - **Network policy blocking egress:** If `networkPolicy.enabled=true`, ensure Obol API egress is allowed.
 
-### Multiple Releases Sharing the Same ENR
+### Multiple Releases Sharing the Same ENR (charts < 0.22)
 
-**Symptoms:** Multiple DVpod releases in the same namespace all report the same public ENR. DKG sidecar polls forever because the cluster definition expects distinct peer identities.
+**Symptoms:** several releases in one namespace report the same public ENR; the DKG never forms.
 
-**Cause:** By default, the ENR job writes to a shared secret named `charon-enr-private-key`. When multiple releases exist in the same namespace, each ENR job overwrites the previous one, so all pods end up with the last-generated key.
+**Cause:** charts < 0.22 defaulted every release to one shared `charon-enr-private-key` Secret. Charts ≥ 0.22 give each release its own `<fullname>-enr-key`.
 
-**Fix:** Set `secrets.defaultEnrPrivateKey=""` on every release so each gets its own secret (`<release>-enr-key`):
-```bash
-helm upgrade <release> obol/dv-pod -n <ns> --version <current-chart-version> \
-  --reuse-values \
-  --set secrets.defaultEnrPrivateKey=""
-```
-After upgrading, verify each release has a unique ENR:
-```bash
-for release in my-dv-pod-0 my-dv-pod-1 my-dv-pod-2 my-dv-pod-3; do
-  enr=$(kubectl get secret -n <ns> ${release}-enr-key -o jsonpath='{.data.enr}' | base64 -d)
-  echo "${release}: ${enr}"
-done
-```
+**Fix:** keep the shared Secret with the release whose ENR is in the cluster definition/lock; give every other release its own identity (`charon.enr.existingSecret.name`, or upgrade to 0.22, which adopts the legacy Secret for at most one release). Before any DKG has completed this is safe; after, it's a recovery — stop and plan with the user. Compare ENRs via each release's `<fullname>-enr` ConfigMap.
 
 ### ENR Mismatch Error
 
-**Symptoms:** DKG sidecar logs show "ENR MISMATCH".
+**Symptoms:** DKG sidecar logs show "ENR MISMATCH", the phase stays `WaitingForInvite`, or `charon-dkg` reports the key "differs from the ENR private key in Secret".
 
 **Causes & Fixes:**
-- The ENR in the secret doesn't match what's registered in the cluster definition.
-- **Option 1:** Update the cluster definition on Launchpad with the current ENR.
-- **Option 2:** Delete the secret and redeploy with the correct ENR:
-  ```bash
-  # Get current ENR
-  kubectl get secret charon-enr-private-key -n <ns> -o jsonpath='{.data.enr}' | base64 -d
-  ```
+- The definition lists a different ENR than this pod's (`kubectl get cm <fullname>-enr -n <ns> -o jsonpath='{.data.enr}'`). Before signatures are complete, have the operator update their ENR on the Launchpad (or the creator recreate the definition) with the pod's ENR.
+- Never delete or regenerate an ENR Secret whose identity is already in a cluster lock — that node can no longer join its cluster. Find which identity the definition/lock lists before changing anything.
 
 ### CrashLoopBackOff on Charon Container
 
@@ -141,29 +125,16 @@ done
   helm get values <release> -n <ns> | grep beacon
   ```
   Fix: Set `charon.beaconNodeEndpoints[0]`.
-- **Beacon node unreachable:** Check network connectivity from the pod.
+- **Beacon node unreachable or syncing:** Check from inside the cluster (Obol Stack: `obol network status ethereum/<id>`).
   ```bash
-  kubectl exec -n <ns> <pod> -c charon -- wget -qO- <beacon-url>/eth/v1/node/health 2>&1
+  kubectl run -n <ns> bn-check --rm -it --restart=Never --image=curlimages/curl -- curl -s <beacon-url>/eth/v1/node/syncing
   ```
 - **Invalid cluster-lock.json:** Check Charon logs for specific error messages.
 - **Port conflicts:** Ensure ports 3600, 3610, 3620 are not conflicting.
 
-### Local k3d/macOS Mount Error in dkg-sidecar
+### Local k3d/macOS Mount Error (charts < 0.21)
 
-**Symptoms:** Init container fails with an error similar to:
-`error mounting ... /charon-data/charon-enr-private-key ... mountpoint ... is outside of rootfs`.
-
-**Cause:** Environment-specific mount behavior when a secret subPath is mounted under a PVC path.
-
-**Testing workaround:** disable charon-data persistence for the test run:
-```bash
-helm upgrade <release> obol/dv-pod -n <ns> --version <current-chart-version> \
-  --reuse-values \
-  --set persistence.enabled=false
-```
-
-**Note:** This workaround is for test/dev only; data is not persisted across restarts.
-This chart-level mount-path issue is expected to be fixed soon.
+`error mounting ... /charon-data/charon-enr-private-key ... outside of rootfs`: fixed in 0.21 (the key is mounted at `/data/charon-enr-private-key`). Upgrade the chart; don't disable persistence on anything holding keys.
 
 ### Validator Client Not Starting
 
@@ -172,17 +143,12 @@ This chart-level mount-path issue is expected to be fixed soon.
 **Causes & Fixes:**
 - **No keystores yet:** Validator client needs DKG to complete first. Check if `cluster-lock.json` exists.
   ```bash
-  kubectl exec -n <ns> <pod> -c charon -- ls /charon-data/cluster-lock.json
+  kubectl get cm <fullname>-dkg-status -n <ns> -o jsonpath='{.data.phase}'   # Complete or LockPresent
   ```
 - **Wrong validator client type:** Check compatibility with the network.
-- **Prysm ToS not accepted:**
-  ```bash
-  helm get values <release> -n <ns> | grep acceptTerms
-  ```
-  Fix: Set `validatorClient.config.prysm.acceptTermsOfUse=true`.
 - **Keystore import failure:** Check init container logs:
   ```bash
-  kubectl logs -n <ns> <pod> -c import-keystores
+  kubectl logs -n <ns> <pod> -c import-keystores    # prysm-wallet-import / nimbus-import for those VCs
   ```
 
 ### Storage Issues
@@ -218,16 +184,13 @@ This chart-level mount-path issue is expected to be fixed soon.
 
 ## Recovery from Failed DKG
 
-If DKG fails or gets stuck:
+If the DKG fails or gets stuck:
 
-1. Check all operators' nodes are online and running
-2. Check all operators have signed on the Launchpad
-3. Check DKG sidecar logs for specific errors
-4. If needed, restart the DKG sidecar:
-   ```bash
-   kubectl delete pod <pod> -n <ns>
-   ```
-   The StatefulSet will recreate it and DKG sidecar will retry.
+1. Phase and message in `<fullname>-dkg-status`; logs of `dkg-sidecar` and `charon-dkg`.
+2. All operators' nodes online at the same time, all signatures in (Launchpad route).
+3. Same charon minor version on every operator (charon's DKG rejects other minors).
+4. `charon-dkg` retries by itself; a pod restart (`kubectl delete pod`) is only for a stuck pod **before** the DKG completed.
+5. "data dir contains `validator_keys/` but no lock": an earlier DKG left partial output. The chart never deletes key material — back up `/charon-data`, ask the other operators whether their DKG completed (is the lock on the Obol API?), and clean up only by hand with the user.
 
 ## Monitoring Endpoints
 
@@ -241,15 +204,14 @@ kubectl port-forward -n <ns> <pod> 5064:5064
 # Visit: http://localhost:5064/metrics
 
 # Bundled Prometheus UI (only when centralMonitoring.enabled=true)
-kubectl port-forward -n <ns> svc/prometheus 9090:9090
+kubectl port-forward -n <ns> svc/<fullname>-prometheus 9090:9090
 # Visit: http://localhost:9090
 ```
 
-If `centralMonitoring.enabled=true` was set, a `prometheus` Deployment runs in the
-namespace and scrapes Charon at `:3620` every 12s, then remote-writes to
-`centralMonitoring.promEndpoint`. Inspect it with:
+If `centralMonitoring.enabled=true` was set, a `<fullname>-prometheus` Deployment runs in the
+namespace and scrapes Charon at `:3620`, then remote-writes to `centralMonitoring.promEndpoint`:
 
 ```bash
-kubectl get deploy,svc,cm -n <ns> -l app=prometheus
-kubectl logs -n <ns> deploy/prometheus
+kubectl get deploy,svc -n <ns> | grep prometheus
+kubectl logs -n <ns> deploy/<fullname>-prometheus
 ```

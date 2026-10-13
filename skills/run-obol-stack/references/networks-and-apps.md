@@ -9,7 +9,7 @@ Load this file when the user is doing infra work that isn't the agent commerce l
 Two-stage model: **install** (save config) then **sync** (deploy).
 
 ```bash
-obol network list                                     # what's available
+obol network list                                     # installed nodes (type/id, network, EL/CL, mode, MEV) + installable types
 obol network install ethereum --network=hoodi --id demo   # config only
 obol network sync ethereum/demo                       # deploys to the cluster
 ```
@@ -19,7 +19,7 @@ Networks available (verify with `obol network list` to avoid rot): **ethereum** 
 Ethereum install knobs:
 
 - `--network mainnet|sepolia|hoodi`
-- `--execution-client reth|geth|nethermind|besu|erigon|ethereumjs`
+- `--execution-client reth|geth|nethermind|besu|erigon`
 - `--consensus-client lighthouse|prysm|teku|nimbus|lodestar|grandine`
 - `--mode full|archive` *(default `full`)* — see "Full vs. archive" below.
 - `--since <preset|block|duration>` *(reth-only; with `--mode archive`)* — bounds the archive at a historical point so you don't have to keep history all the way back to genesis. See "Partial archive with `--since`" below.
@@ -66,13 +66,44 @@ On a TTY with `--mode archive` set but `--since` omitted, an interactive "Archiv
 - `--mode` and `--since` are **wired only for reth** today. With geth / besu / erigon / nethermind they emit a warning and fall back to the chart's default archive behavior; reach for `--execution-client reth` when the user wants the partial-archive behavior.
 - A bigger window than the user needs is wasted disk; a smaller window than the user needs is a re-sync. Default the conversation to "what's the oldest block your indexer / analysis needs to read?" and choose the next-older preset.
 
-Resulting endpoints (replace `{id}` with the deployment ID they chose):
+Resulting endpoints (replace `<id>` with the deployment ID from `obol network list`; `-o json` has `deployments[]`). The first install of a network gets the network name as its id (`ethereum-mainnet`, `ethereum-hoodi`), and a second one a petname; the dv-pod chart defaults its beacon node to `ethereum-<network>`.
 
-- Execution RPC: `http://obol.stack/ethereum-{id}/execution`
-- Beacon API: `http://obol.stack/ethereum-{id}/beacon`
-- Unified eRPC (load-balances across installed execution deployments): `http://obol.stack/rpc`
+| What | In-cluster (pods, dv-pod, Hermes) | From the host |
+|---|---|---|
+| Execution JSON-RPC | `http://ethereum-execution.ethereum-<id>.svc.cluster.local:8545` | `obol kubectl port-forward -n ethereum-<id> svc/ethereum-execution 8545:8545` |
+| Beacon API | `http://ethereum-beacon.ethereum-<id>.svc.cluster.local:5052` | `obol kubectl port-forward -n ethereum-<id> svc/ethereum-beacon 5052:5052` |
+| Unified eRPC (chain data, load-balanced) | `http://erpc.erpc.svc.cluster.local/rpc/<network>` | `http://obol.stack/rpc/<network>` |
 
-From inside pods use the cluster-internal DNS instead — `obol.stack` only resolves on the host (see the DNS gotcha in the main SKILL.md).
+The EL/CL ServiceMonitors carry `release: monitoring`, so the Stack's Prometheus (`monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090`) scrapes both clients. There are no per-node `obol.stack/ethereum-<id>/…` routes; port-forward to talk to one node directly. Each network namespace also has an `ethereum-<id>-metadata` ConfigMap listing its endpoints. `obol.stack` only resolves on the host (see the DNS gotcha in the main SKILL.md).
+
+### Is the node synced?
+
+A DV (or anything validating) needs a node that is **synced**, which means all of:
+
+- **EL**: `eth_syncing` returns `false`, and `net_peerCount` > 0.
+- **CL**: `/eth/v1/node/syncing` has `is_syncing: false`, `is_optimistic: false`, `el_offline: false`, and `sync_distance` ≤ 2 slots; `/eth/v1/node/peer_count` `connected` > 0.
+
+Check it, in order of preference:
+
+1. `obol network status ethereum/<id>` (or no argument for every node): pods, EL (`eth_syncing`, head, peers, version), CL (syncing, peers, version) and a verdict — `synced`, `syncing` (with progress), `waiting`, `degraded`, `el_offline`, `unreachable`, `not_deployed`. Gate on `synced` with no peer warnings; `obol -o json network status ethereum/<id>` → `.nodes[].verdict` for scripting. (CLIs before v0.16 show only eRPC health here; fall back to step 2.)
+2. Probe the APIs yourself through port-forwards (`obol kubectl -n ethereum-<id> port-forward svc/ethereum-beacon 5052:5052 &`, same for `svc/ethereum-execution 8545:8545`), then:
+   ```bash
+   curl -s localhost:5052/eth/v1/node/syncing | jq .data
+   curl -s localhost:5052/eth/v1/node/peer_count | jq .data.connected
+   curl -s -X POST localhost:8545 -H 'content-type: application/json' \
+     -d '{"jsonrpc":"2.0","id":1,"method":"eth_syncing","params":[]}' | jq .result
+   ```
+3. Pods: `obol kubectl get pods -n ethereum-<id>` — both clients `Running` with few restarts.
+
+While syncing, report progress (CL `head_slot` + `sync_distance`, EL `currentBlock`/`highestBlock`) and an honest ETA rather than polling silently. An EL with `eth_syncing=false` at block 0 is waiting for the CL, not synced.
+
+### Sizing for a validating node
+
+Use `--mode full`. Mainnet: ≥2 TB fast SSD free (EL ~1 TB and growing, CL ~200 GB), 16–32 GB RAM, 4+ cores. Hoodi/sepolia: ~300 GB. The node's PVC sizes (mainnet 500Gi EL / 200Gi CL; testnets 100Gi / 50Gi) are not enforced by local-path storage — the host disk is what fills up.
+
+### MEV
+
+The Stack runs no MEV-boost sidecar: until Gloas the beacon node builds blocks locally, and from Gloas (ePBS) builder bids arrive in-protocol over p2p, so relays and mev-boost no longer apply. A dv-pod on this node keeps `charon.builderApi: false`, and its DV cluster must agree to run without MEV.
 
 ## Deploy your own service (the `obol-app` chart)
 

@@ -39,9 +39,14 @@ Why this matters: `--publish` signs the test report with the Charon ENR private 
 # CDVN / LCDVN — Docker Compose stack
 docker compose exec charon charon alpha test <suite> --publish
 
-# Obol Stack / helm-charts dv-pod — Kubernetes
-kubectl exec -n <ns> <charon-pod> -c charon -- charon alpha test <suite> --publish
+# helm-charts dv-pod (incl. the Obol Stack: use `obol kubectl`). The container is `dv-pod`, and the
+# ENR key and lock are not at the .charon/ defaults, so pass their paths explicitly.
+obol kubectl exec -n <ns> <fullname>-0 -c dv-pod -- charon alpha test <suite> \
+  --publish --publish-private-key-file=/data/charon-enr-private-key
+# peers also needs: --lock-file=/charon-data/cluster-lock.json --private-key-file=/data/charon-enr-private-key
 ```
+
+In the Obol Stack the beacon suite targets the in-cluster node: `--endpoints=http://ethereum-beacon.ethereum-<id>.svc.cluster.local:5052`. Use `obol kubectl` (never the user's default kubeconfig); outside the Stack drop the `obol` prefix. Check the node's own sync first with `obol network status ethereum/<id>`.
 
 **Always pass `--publish`** unless the user explicitly objects. Cost is negligible, and it buys: (1) correlation to the user's real ENR, (2) fleet-level visibility into DV health for the Obol team, (3) a signed receipt the user can reference when asking for support.
 
@@ -58,7 +63,7 @@ docker run --rm obolnetwork/charon:v1.11.0 alpha test infra --publish   # match 
 |------|---------|----------|
 | `--publish` | `false` | **Default on** in every invocation this skill recommends. |
 | `--publish-address` | `https://api.obol.tech/v1` | Leave alone unless user explicitly targets a staging/test endpoint. |
-| `--publish-private-key-file` | `.charon/charon-enr-private-key` | Inside a running Charon container this path already resolves correctly; don't override. |
+| `--publish-private-key-file` | `.charon/charon-enr-private-key` | Resolves inside a CDVN/LCDVN Charon container. In a dv-pod set it to `/data/charon-enr-private-key` (the chart's `charon.privateKeyFile`). |
 | `--output-json <path>` | (stdout only) | Pass when archiving results or combining with `--quiet`. |
 | `--quiet` | `false` | Requires `--output-json`. Use in CI / scripts. |
 | `--timeout <dur>` | `1h` | Shorten for quick sanity checks (e.g. `--timeout 5m`). |
@@ -94,8 +99,8 @@ Common `Poor` patterns to anticipate:
 
 ## Adjacent skills / docs
 
-- Live runtime diagnostics on a cluster that's already activated → `obol-monitoring` (Grafana-based, not `charon alpha test`-based).
-- Deploying OVM / reward splits → `deploy-obol-ovm` (in `obol-splits/.claude/skills/`).
-- Canonical CLI reference: https://docs.obol.org/docs/charon/charon-cli-reference
-- Errors & failure mode catalogue: https://docs.obol.org/docs/faq/errors
-- Activation flow: https://docs.obol.org/docs/next/start/activate
+- Live runtime diagnostics on a cluster that's already activated → `obol-monitoring` (Grafana-based), `dvpod-monitoring` (a dv-pod's own metrics/logs), or `dv-steward` (Hermes in the Obol Stack).
+- Canonical CLI reference: https://docs.obol.org/learn/charon/charon-cli-reference
+- Test a cluster: https://docs.obol.org/run-a-dv/prepare/test-a-cluster
+- Errors & failure mode catalogue: https://docs.obol.org/advanced-and-troubleshooting/troubleshooting/errors
+- Activation flow: https://docs.obol.org/run-a-dv/running/activate-a-dv

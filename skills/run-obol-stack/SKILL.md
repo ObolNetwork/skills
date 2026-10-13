@@ -1,6 +1,6 @@
 ---
 name: run-obol-stack
-description: Help a human install, boot, operate, and productise the Obol Stack — Obol's Kubernetes-based agent harness for running blockchain infrastructure locally, exposing services to the public internet, and charging for them via x402 micropayments. The flagship outcome is a paid sub-agent business — a specialised agent so packed with alpha that strangers pay per turn. Use whenever a user mentions Obol Stack, Obol Agent, Hermes, OpenClaw, x402 payments, agent commerce, ERC-8004, selling inference / APIs / an agent's replies, building an agent people will pay for, storefront branding, running a local Ethereum or L2 node under `obol network`, deploying a Dockerfile via `obol-app`, or bringing up a Cloudflare tunnel / custom domain for an agent service. You are helping from OUTSIDE the Stack — the agents inside it have their own skills and take over once the user is at the dashboard.
+description: Help a human install, boot, operate, and productise the Obol Stack — Obol's Kubernetes-based agent harness for running blockchain infrastructure locally, exposing services to the public internet, and charging for them via x402 micropayments. The flagship outcome is a paid sub-agent business — a specialised agent so packed with alpha that strangers pay per turn. Use whenever a user mentions Obol Stack, Obol Agent, Hermes, OpenClaw, x402 payments, agent commerce, ERC-8004, selling inference / APIs / an agent's replies, building an agent people will pay for, storefront branding, running a local Ethereum or L2 node under `obol network`, running their part of an Obol distributed validator (DV) in the Stack, deploying a Dockerfile via `obol-app`, or bringing up a Cloudflare tunnel / custom domain for an agent service. You are helping from OUTSIDE the Stack — the agents inside it have their own skills and take over once the user is at the dashboard.
 ---
 
 # Run the Obol Stack
@@ -28,9 +28,11 @@ Match on any of:
 - User wants to **brainstorm what to build or sell** on the Stack — workshopping business ideas or use cases, "what could I do with this", "is my idea any good", pricing a concept — even before installing anything (see [Workshop the business idea](#workshop-the-business-idea-pre-install-and-post-install)).
 - User mentions "OpenClaw", "Obol Agent", "8004", "agent registration", "agent commerce", "payment-gated endpoint", "local inference + tunnel".
 - User is running the `obol sell demo` flow (lands in 0.9+) and wants help paying for / interpreting the demo skill.
+- User wants to run their share of a Distributed Validator in the Stack — sync the EL/CL here, then route the DV steps (see [Run your part of a Distributed Validator](#run-your-part-of-a-distributed-validator)).
 
-Don't use this skill for:
-- Running a Distributed Validator node → see CDVN / LCDVN / helm-charts CLAUDE.mds and the `test-a-dv-cluster` skill.
+Don't use this skill for (route instead):
+- Installing / operating the dv-pod itself → `dvpod`. Creating a DV cluster → `create-cluster-invitation`. Testing it → `test-a-dv-cluster`. This skill owns only the Stack and its synced node.
+- A DV outside the Stack (Docker Compose CDVN / LCDVN) → those repos' docs.
 - Obol's hosted Grafana cluster monitoring → see the `obol-monitoring` skill.
 - Live diagnostics against the *DV* fleet → also `obol-monitoring`.
 - Contributor work on the Stack's Go code → see `obol-stack-dev` in the repo.
@@ -72,8 +74,9 @@ Before any install/bring-up advice, confirm:
 - **Foundry** (optional) — for on-chain payment testing. `foundryup` to install.
 - **Disk / memory**:
   - Cluster + agent alone: ~10GB disk, ~4GB RAM.
-  - Plus an Ethereum mainnet full node: **~1TB disk** (execution) + ~200GB (consensus) + 16GB+ RAM recommended.
-  - For a testnet (sepolia, hoodi): ~200GB disk is plenty.
+  - Plus an Ethereum mainnet full node: **≥2 TB fast SSD free** (execution ~1 TB and growing, consensus ~200 GB) + 16GB+ RAM recommended — 32 GB if it also runs a dv-pod.
+  - For a testnet (sepolia, hoodi): ~300 GB SSD is plenty.
+  - The node's PVC sizes are not enforced by the Stack's local-path storage — the host disk is the real limit, so check `df -h` on the Obol data dir before syncing.
 - **Ports free**: `8080` (Traefik). `~/.config/obol/` writable.
 
 Don't skip these — most "stack up fails" reports trace back to Docker not running, not enough disk, or Ollama missing.
@@ -174,7 +177,23 @@ These three subsystems share a common shape (deploy → wire up → expose) and 
 
 1. **Never expose the frontend (`/`) or eRPC (`/rpc`) routes through the tunnel.** They are hostname-restricted to `obol.stack` for a reason — the frontend has cluster-admin-like UI capabilities and eRPC is unauthenticated. Exposing either is a critical security flaw. If a user wants their RPC public, wrap it in an `obol-app` service with their own auth layer on a `/services/<name>/*` route instead.
 2. **Client diversity matters on mainnet.** If the user is syncing Ethereum mainnet, push them off the default EL/CL to a minority client (rationale is network-level, not just Stack-level).
-3. **If the user will read history, choose archive.** `obol network install ethereum --mode archive` is the right default for anyone planning to index events, run historical `eth_call`, or build an explorer — a pruned full node returns `state at block N is pruned` for those queries. Pair with `--since <preset|block|duration>` to bound the archive (e.g. `--since prague` ≈ 0.4 TB on mainnet) instead of paying for all 4 TB+ back to genesis. Reth-only today; full coverage in the reference.
+3. **If the user will read history, choose archive.** `obol network install ethereum --mode archive` is the right default for anyone planning to index events, run historical `eth_call`, or build an explorer — a pruned full node returns `state at block N is pruned` for those queries. Pair with `--since <preset|block|duration>` to bound the archive (e.g. `--since prague` ≈ 0.4 TB on mainnet) instead of paying for all 4 TB+ back to genesis. Reth-only today; full coverage in the reference. (Validating needs `full`, not archive.)
+
+## Run your part of a Distributed Validator
+
+The Stack can host one operator's share of an Obol DV: a synced EL/CL from `obol network`, a `dv-pod` release pointed at it, and the in-stack Hermes agent watching both. Drive steps 1–5 from outside; step 6 belongs to Hermes. Use `obol kubectl` / `obol helm` throughout — never the user's default kubeconfig.
+
+1. **Pick the network** with the user (`hoodi` to practise, `mainnet` for real money) and keep it explicit in every command after this.
+2. **Install and sync a full node**: `obol network install ethereum --network <net> --mode full` (minority clients on mainnet; the Stack runs no MEV-boost, so the dv-pod keeps `charon.builderApi: false`), then `obol network sync ethereum/<id>`. Note the `<id>`: the beacon API the dv-pod uses is `http://ethereum-beacon.ethereum-<id>.svc.cluster.local:5052`.
+3. **Sync gate** — don't install the dv-pod until `obol network status ethereum/<id>` says `synced` (definition and fallback checks in [`references/networks-and-apps.md`](references/networks-and-apps.md#is-the-node-synced)). Mainnet syncs take many hours to days; hoodi a few hours. The only exception: on a testnet the user may explicitly accept running on the chart's publicnode fallback beacon while the local node catches up.
+4. **Install the dv-pod** → `dvpod` skill (its `obol-stack.md`): pinned chart version, explicit `network`, the user's operator address, in-cluster beacon, ServiceMonitor, `statusReaders` for Hermes.
+5. **Create or join the cluster** → `create-cluster-invitation` (Launchpad invite vs. direct `charon create dkg` definition, charon version gate), then **verify before any deposit** (`test-a-dv-cluster` + the checklist in `create-cluster-invitation`). Never let the user deposit before that.
+6. **Hand stewardship to Hermes**:
+   ```bash
+   obol agent skills add dv-steward distributed-validators
+   obol hermes gateway setup        # the user runs this; pick Telegram, paste the bot token there, never in chat
+   ```
+   The Hermes deployment sets `GATEWAY_ALLOW_ALL_USERS=true`, so **insist on `TELEGRAM_ALLOWED_USERS`** (the user's numeric Telegram ID) — without it anyone who finds the bot can talk to an agent that holds a wallet. Also set `TELEGRAM_HOME_CHANNEL` (where alerts go). The non-interactive path is `obol hermes config set TELEGRAM_BOT_TOKEN …` / `TELEGRAM_ALLOWED_USERS …` / `TELEGRAM_HOME_CHANNEL …`, run by the user in their own terminal, then `obol hermes gateway restart`. Then create the watch job from the `dv-steward` skill's cron recipe (`obol hermes cron create … --skill dv-steward --deliver telegram`) and have the user confirm a test alert arrives.
 
 ## Agent commerce — the orientation
 
@@ -239,7 +258,7 @@ Inference vs. agent purchases solve different problems — don't conflate them:
 Per-agent:
 - Unique Ethereum signing wallet, backed by a remote-signer Service in the same namespace. Back it up: `obol agent wallet backup --file ~/obol-wallet-backup.json --passphrase "..."` (sub-agent wallets: `obol stack export --file …` with the cluster running). **Back the export up externally** — losing it loses the agent's on-chain identity.
 - An API server bearer token: `obol agent auth [<instance>]` (regenerate with `--regenerate`).
-- An embedded skill set (covers cluster diag, Ethereum reads, local-wallet sending, DV monitoring, DeFi concepts, L2 routing, building-block patterns, security, indexing, orchestration, x402 buy/sell, and more — exact list grows).
+- An embedded skill set (covers cluster diag, Ethereum reads, local-wallet sending, DeFi concepts, L2 routing, building-block patterns, security, indexing, orchestration, x402 buy/sell, and more — exact list grows).
 
 **Always have the user list skills fresh** rather than recite from memory:
 
@@ -312,7 +331,7 @@ Once the user has `obol hermes chat` open (or the agent's dashboard, depending o
 - Ethereum read-only queries (`cast`-style — blocks, balances, ERC-20, ENS)
 - Ethereum signing via the per-agent remote-signer
 - Kubernetes cluster diagnostics from inside the cluster
-- DV cluster monitoring / audit
+- DV monitoring — opt-in: `obol agent skills add distributed-validators` (Obol API) and `dv-steward` (this Stack's own node + dv-pods, on a cron)
 - DeFi building blocks (OpenZeppelin patterns, DEX + oracle integration)
 - L2 routing (Base, Arbitrum, Optimism, zkSync)
 - Indexing (The Graph, Dune, custom)
@@ -352,5 +371,5 @@ External docs:
 - $OBOL token: [docs.obol.org → OBOL token](https://docs.obol.org/community-and-governance/obol-token/).
 - Cloudflared quick tunnels: [Cloudflare Tunnel docs](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/).
 - Stack-internal dev skill (contributors only): `ObolNetwork/obol-stack/.claude/skills/obol-stack-dev/SKILL.md`.
-- DV operator paths (out of scope for this skill): `charon-distributed-validator-node`, `lido-charon-distributed-validator-node`, `helm-charts/charts/dv-pod`, plus the global `test-a-dv-cluster` and `obol-monitoring` skills.
+- DV in the Stack: the `dvpod`, `create-cluster-invitation`, `test-a-dv-cluster` and `dv-steward` skills in this plugin; chart at `helm-charts/charts/dv-pod`. DVs outside the Stack: `charon-distributed-validator-node`, `lido-charon-distributed-validator-node`.
 - Canonical agent index: [obol.org/llms.txt](https://obol.org/llms.txt) (once live).
