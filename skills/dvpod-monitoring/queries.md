@@ -1,6 +1,6 @@
 # Query Cookbook
 
-Curated PromQL and LogQL examples for a deployed DVpod. PromQL examples assume you have port-forwarded a Prometheus that scrapes Charon (either the bundled `prometheus` service or your cluster Prometheus via ServiceMonitor).
+Curated PromQL and LogQL examples for a deployed DVpod. PromQL examples assume you have port-forwarded a Prometheus that scrapes Charon (the bundled `<fullname>-prometheus` service, or a cluster Prometheus via ServiceMonitor — in the Obol Stack `monitoring/monitoring-kube-prometheus-prometheus`, where you should add `namespace="<ns>"` to the filters).
 
 `cluster_name` is set on Charon metrics from cluster-lock metadata once DKG has completed (usually matches the cluster's nickname). `cluster_peer` distinguishes nodes within a cluster. Substitute real values before running, or drop the filter if you only have one DVpod scraped.
 

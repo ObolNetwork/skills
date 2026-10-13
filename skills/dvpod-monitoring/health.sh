@@ -64,8 +64,12 @@ echo "- serviceMonitor.enabled: $svcmon"
 
 # SEL scopes queries to this release when the Prometheus scrapes more than one.
 SEL=""
+# Charts >= 0.21 name the bundled Prometheus Service <fullname>-prometheus (older: prometheus);
+# <fullname> is the release name if it contains "dv-pod", else <release>-dv-pod.
+if [[ "$RELEASE" == *dv-pod* ]]; then FULLNAME="$RELEASE"; else FULLNAME="$RELEASE-dv-pod"; fi
 if [[ "$central" == "true" ]]; then
   PROM_NS="$NAMESPACE"; PROM_SVC="prometheus"
+  kubectl get svc -n "$NAMESPACE" "$FULLNAME-prometheus" >/dev/null 2>&1 && PROM_SVC="$FULLNAME-prometheus"
 elif [[ "$svcmon" == "true" ]] && kubectl get svc -n monitoring monitoring-kube-prometheus-prometheus >/dev/null 2>&1; then
   PROM_NS="monitoring"; PROM_SVC="monitoring-kube-prometheus-prometheus"
   SEL="{namespace=\"$NAMESPACE\",service=\"$RELEASE\"}"

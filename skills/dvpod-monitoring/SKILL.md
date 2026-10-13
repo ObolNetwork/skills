@@ -8,7 +8,7 @@ description: |
   Grafana with cross-cluster fleet view, use the `obol-monitoring` skill.
 user-invocable: true
 disable-model-invocation: false
-allowed-tools: Read, Grep, Glob, Bash(kubectl get pods *), Bash(kubectl get pod *), Bash(kubectl get svc *), Bash(kubectl get pvc *), Bash(kubectl get jobs *), Bash(kubectl get events *), Bash(kubectl get prometheus *), Bash(kubectl logs *), Bash(kubectl port-forward *), Bash(helm list *), Bash(helm get values *), Bash(obol kubectl get *), Bash(obol kubectl logs *), Bash(obol kubectl port-forward *), Bash(obol helm list *), Bash(obol helm get values *), Bash(curl -sG http://localhost:*), Bash(curl -s localhost:*), Bash(bash *dvpod-monitoring/health.sh*), Bash(OBOL=1 bash *dvpod-monitoring/health.sh*)
+allowed-tools: Read, Grep, Glob, Bash(kubectl get pods *), Bash(kubectl get pod *), Bash(kubectl get svc *), Bash(kubectl get pvc *), Bash(kubectl get jobs *), Bash(kubectl get events *), Bash(kubectl get prometheus *), Bash(kubectl logs *), Bash(kubectl port-forward *), Bash(helm list *), Bash(helm get values *), Bash(obol kubectl get pods *), Bash(obol kubectl get pod *), Bash(obol kubectl get svc *), Bash(obol kubectl get pvc *), Bash(obol kubectl get jobs *), Bash(obol kubectl get events *), Bash(obol kubectl get prometheus *), Bash(obol network status*), Bash(obol kubectl logs *), Bash(obol kubectl port-forward *), Bash(obol helm list *), Bash(obol helm get values *), Bash(curl -sG http://localhost:*), Bash(curl -s localhost:*), Bash(bash *dvpod-monitoring/health.sh*), Bash(OBOL=1 bash *dvpod-monitoring/health.sh*)
 argument-hint: "[query type] [release] — e.g. health my-dv-pod, errors, peers, duties, logs"
 ---
 
@@ -38,11 +38,11 @@ helm get values <release> -n <namespace> -o json
 
 ### Metrics path (in priority order)
 
-1. **Bundled Prometheus** — `centralMonitoring.enabled=true`. There will be a `prometheus` Service on port 9090 in the namespace:
+1. **Bundled Prometheus** — `centralMonitoring.enabled=true`. There will be a `<fullname>-prometheus` Service (`prometheus` on charts < 0.21) on port 9090 in the namespace:
    ```bash
-   kubectl get svc prometheus -n <namespace>
+   kubectl get svc -n <namespace> | grep prometheus
    ```
-   Query path: port-forward `svc/prometheus 9090` and hit the standard Prometheus HTTP API.
+   Query path: port-forward that Service on 9090 and hit the standard Prometheus HTTP API.
 2. **Cluster Prometheus via ServiceMonitor** — `serviceMonitor.enabled=true` (the Obol Stack's default for dv-pods: `monitoring/monitoring-kube-prometheus-prometheus`). Otherwise auto-discover a Prometheus the operator manages:
    ```bash
    kubectl get prometheus -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}' 2>/dev/null
@@ -92,7 +92,7 @@ Use this for **all** routine `/dvpod-monitoring health` invocations. Fall throug
 
 ```bash
 # Run port-forward in the background, then query.
-kubectl port-forward -n <namespace> svc/prometheus 9090:9090 >/dev/null 2>&1 &
+kubectl port-forward -n <namespace> svc/<prometheus-svc> 9090:9090 >/dev/null 2>&1 &   # <fullname>-prometheus, or monitoring/monitoring-kube-prometheus-prometheus
 PF_PID=$!
 trap "kill $PF_PID 2>/dev/null" EXIT
 
