@@ -88,7 +88,7 @@ Claude picks the right skill from your request, or you can call one directly wit
 | [`autoresearch`](skills/autoresearch/SKILL.md) | Run autoresearch GPU experiments and publish/sell the best checkpoint | GPU, Python 3, `uv`, `ollama`; `obol` to sell |
 | [`autoresearch-worker`](skills/autoresearch-worker/SKILL.md) | Sell GPU time as a paid autoresearch experiment worker | GPU host, Python 3 + `uv` or Docker, Obol Stack |
 | [`autoresearch-coordinator`](skills/autoresearch-coordinator/SKILL.md) | Discover paid GPU workers via ERC-8004 and run experiments across them | Python 3; Obol Stack agent wallet to pay |
-| [`distributed-validators`](skills/distributed-validators/SKILL.md) | Check DV cluster health, validator performance, operators and exits via the Obol API (read-only) | `curl` |
+| [`distributed-validators`](skills/distributed-validators/SKILL.md) | Check DV cluster health, validator performance, operators and exits via the Obol API (read-only) | The bundled Obol MCP server (needs [`uv`](https://docs.astral.sh/uv/)), or `curl` |
 | [`dv-steward`](skills/dv-steward/SKILL.md) | Let the Obol Stack's Hermes agent watch your local node and dv-pods on a schedule and alert you (read-only) | Obol Stack, Hermes |
 
 `distributed-validators` and `dv-steward` are written for the Obol Stack's Hermes agent: `obol agent skills add dv-steward distributed-validators`. They work as Claude Code plugin skills too.
@@ -105,6 +105,10 @@ Sync hoodi in my Obol Stack, install a dv-pod for my operator address, and join 
 
 > [!WARNING]
 > An AI agent can make mistakes. Always check withdrawal addresses, fee recipients, operator sets, and the target network yourself before depositing. Never paste private keys or mnemonics into an AI chat.
+
+### Bundled MCP server
+
+The plugin starts the [Obol MCP server](https://github.com/ObolNetwork/obol-mcp) (`uvx obol-mcp`), which gives Claude read-only tools for the public Obol API: cluster locks, validator effectiveness and states, exit progress and operators. It validates every identifier, rate limits, and trims large responses, so prefer it over raw `curl`. It needs [`uv`](https://docs.astral.sh/uv/); without it the server shows as failed in `/mcp` and `distributed-validators` falls back to `curl`.
 
 ## Adding New Skills
 
