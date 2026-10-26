@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "obol": {
+      "command": "uvx",
+      "args": ["obol-mcp@0.2.0"],
+      "env": {
+        "OBOL_MCP_CLIENT_ID": "claude-code-plugin"
+      }
+    }
+  }
+}
