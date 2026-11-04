@@ -110,15 +110,17 @@ The ENR job adds the public `enr` field if it's missing and never overwrites the
 # Prometheus Operator in the cluster (Obol Stack: labels.release=monitoring)
   --set serviceMonitor.enabled=true --set serviceMonitor.labels.release=monitoring
 
-# Bundled Prometheus (<fullname>-prometheus:9090) remote-writing to Obol's backend, or your own
-  --set centralMonitoring.enabled=true --set centralMonitoring.token=<token>
+# Bundled Prometheus (<fullname>-prometheus:9090) remote-writing to Obol's backend, or your own.
+# The token comes from a Secret the user creates from a file (chart 0.22.1+):
+#   kubectl create secret generic obol-monitoring -n <ns> --from-file=token=<file>
+  --set centralMonitoring.enabled=true --set centralMonitoring.existingSecret=obol-monitoring
   --set centralMonitoring.promEndpoint=https://prom.example.com/api/v1/write
 
 # Push charon logs to Loki
   --set charon.lokiAddresses=http://loki.monitoring.svc:3100/loki/api/v1/push --set charon.lokiService=dv-pod-hoodi
 ```
 
-Have the user pass tokens themselves rather than pasting them into chat.
+Never take a token in chat or as a Helm value (`centralMonitoring.token` lands in the release and `helm get values` prints it). In the Obol Stack, follow obol-stack.md → "Nickname and Obol monitoring".
 
 ## Example 7: Production-leaning settings
 
