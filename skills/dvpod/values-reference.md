@@ -103,7 +103,9 @@ Secret precedence: `existingSecret.name` → the Secret the release already moun
 | Value | Description | Default |
 |-------|-------------|---------|
 | `serviceMonitor.enabled` / `.labels` / `.interval` | ServiceMonitor for a Prometheus Operator. Obol Stack: `labels: {release: monitoring}` | `false` / `{}` / `1m` |
-| `centralMonitoring.enabled` / `.promEndpoint` / `.token` | Bundled Prometheus pod (`prometheus:9090` in the namespace) remote-writing to Obol (token stored in a Secret) | `false` / `https://vm.monitoring.gcp.obol.tech/write` / `""` |
+| `centralMonitoring.enabled` / `.promEndpoint` | Bundled Prometheus pod (`<fullname>-prometheus:9090` in the namespace) remote-writing to Obol | `false` / `https://vm.monitoring.gcp.obol.tech/write` |
+| `centralMonitoring.existingSecret` / `.existingSecretKey` | Secret holding the token (0.22.1+); preferred | `""` / `token` |
+| `centralMonitoring.token` | Token as a value; avoid (stored in the Helm release, shown by `helm get values`) | `""` |
 | `readinessProbe.enabled` | Pod Ready = charon `/readyz` OK (no liveness probe by default, on purpose) | `true` |
 
 ## Security
