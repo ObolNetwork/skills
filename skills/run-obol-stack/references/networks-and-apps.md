@@ -20,9 +20,12 @@ Ethereum install knobs:
 
 - `--network mainnet|sepolia|hoodi`
 - `--execution-client reth|geth|nethermind|besu|erigon`
-- `--consensus-client lighthouse|prysm|teku|nimbus|lodestar|grandine`
+- `--consensus-client lighthouse|prysm|teku|nimbus|lodestar|grandine|silver` (silver: alpha, amd64 hosts only, obol v0.18.0 or later; suggest a testnet first)
 - `--mode full|archive` *(default `full`)* — see "Full vs. archive" below.
 - `--since <preset|block|duration>` *(reth-only; with `--mode archive`)* — bounds the archive at a historical point so you don't have to keep history all the way back to genesis. See "Partial archive with `--since`" below.
+- `--execution-memory <size>` / `--consensus-memory <size>` *(e.g. `16Gi`)* — the client's memory **limit** (obol v0.18.0+; before that it was the request). Leave them unset: obol sizes each client per network, mode and client, and sync warns when a value is below the default limit. Only set one to give a client more room after it was OOM-killed, or to make a node fit on a small machine. Edit later as `executionMemory` / `consensusMemory` in the deployment's `values.yaml`, then `obol network sync`.
+
+**Memory (obol v0.18.0+)**: every client gets a memory request and limit, and is told its limit (`GOMEMLIMIT`, JVM/Node heap sizes, Nethermind's memory hint, reth's cache). Hoodi beacon nodes get mainnet-sized limits, because Hoodi's validator set is as large as mainnet's. `network install` and `sync` warn when the cluster's memory requests won't fit, and `sync` says when it will restart clients to apply new limits (data is kept). After upgrading obol, sync every node, since its requests may drop. Not enough memory: stop a node (`obol network stop <network>/<id>`) before lowering limits.
 
 **Client diversity nudge**: same as CDVN — if the user is running mainnet, push them off the default EL/CL to something non-majority. Rationale is network-level (correlated client failures hurt Ethereum) not just Stack-level.
 

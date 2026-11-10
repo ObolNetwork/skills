@@ -121,6 +121,8 @@ obol hermes chat                          # opens an interactive chat TUI agains
 - Creates the default Hermes agent (namespace `hermes-obol-agent`) with an Ethereum signing wallet and an embedded skill set
 - Auto-configures LiteLLM with any host Ollama models it finds
 
+**Memory cap (obol v0.18.0+, k3d backend):** `obol stack init` caps the cluster at the host's Docker memory minus 4–8 GiB, left for the OS and the user's other work, and `stack up` turns swap off for it. A pod that outgrows the cap is OOM-killed inside the cluster instead of the host starving. Hosts with less than 12 GiB get no cap. Set it with `obol stack init --node-memory <size|auto|off>` or `OBOL_NODE_MEMORY`. Once a cluster exists, its cap changes only with `docker update --memory <size> --memory-swap <size> <k3d server container>`, and Kubernetes keeps scheduling against the size the cluster was created with.
+
 Crucially, **the default agent is created by `stack up` itself**. `obol agent new` is for creating **additional** agents beside the default, each with its own wallet and skill set. Don't tell users to run `obol agent new` immediately after `stack up` unless they want a second agent.
 
 **Talking to the default agent:**
