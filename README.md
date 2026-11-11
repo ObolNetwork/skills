@@ -85,9 +85,6 @@ Claude picks the right skill from your request, or you can call one directly wit
 | [`dvpod-monitoring`](skills/dvpod-monitoring/SKILL.md) | Query a deployed DVpod's metrics and logs (read-only) | `kubectl`, `helm` |
 | [`obol-monitoring`](skills/obol-monitoring/SKILL.md) | Triage cluster health and duty failures in Obol's hosted Grafana | Python 3.6+, `OBOL_GRAFANA_API_TOKEN` |
 | [`run-obol-stack`](skills/run-obol-stack/SKILL.md) | Install, operate, and sell paid agent services from the Obol Stack; sync a node and run your part of a DV in it | Docker, a model provider |
-| [`autoresearch`](skills/autoresearch/SKILL.md) | Run autoresearch GPU experiments and publish/sell the best checkpoint | GPU, Python 3, `uv`, `ollama`; `obol` to sell |
-| [`autoresearch-worker`](skills/autoresearch-worker/SKILL.md) | Sell GPU time as a paid autoresearch experiment worker | GPU host, Python 3 + `uv` or Docker, Obol Stack |
-| [`autoresearch-coordinator`](skills/autoresearch-coordinator/SKILL.md) | Discover paid GPU workers via ERC-8004 and run experiments across them | Python 3; Obol Stack agent wallet to pay |
 | [`distributed-validators`](skills/distributed-validators/SKILL.md) | Check DV cluster health, validator performance, operators and exits via the Obol API (read-only) | The bundled Obol MCP server (needs [`uv`](https://docs.astral.sh/uv/)), or `curl` |
 | [`dv-steward`](skills/dv-steward/SKILL.md) | Let the Obol Stack's Hermes agent watch your local node and dv-pods on a schedule and alert you (read-only) | Obol Stack, Hermes |
 
