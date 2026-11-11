@@ -88,7 +88,7 @@ but say "No invite found" for all of them.
   ```bash
   helm get values <release> -n <ns> | grep operatorAddress
   ```
-  Fix (DKG not done yet, so restarting is harmless): `helm upgrade <release> obol/dv-pod -n <ns> --version <current-chart-version> --reuse-values --set charon.operatorAddress=<correct-address>` (the upgrade restarts the pod).
+  Fix (DKG not done yet, so restarting is harmless): `helm upgrade <release> obol/dv-pod -n <ns> --version <current-chart-version> --reset-then-reuse-values --set charon.operatorAddress=<correct-address>` (the upgrade restarts the pod).
 - **Cluster not fully confirmed:** ALL operators must accept/sign on the Launchpad before the
   sidecar will detect the invite. Check the Launchpad cluster page to see which operators are pending.
 - **Solo cluster:** Launchpad mode only finds group-cluster invites. For one person running every node, use the direct route (`mode: definition`).

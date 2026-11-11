@@ -26,14 +26,14 @@ Use this when the dv-pod goes into an Obol Stack (k3d cluster managed by the `ob
 Start from the chart's own example, pinned to the version you install:
 
 ```bash
-obol helm pull obol/dv-pod --version 0.22.0 --untar --untardir ./dv-pod-chart
+obol helm pull obol/dv-pod --version 0.23.0 --untar --untardir ./dv-pod-chart
 # -> ./dv-pod-chart/dv-pod/values-examples/obol-stack.yaml
 ```
 
 It sets `mode: launchpad`, `network: mainnet` (the beacon defaults to the Stack's `ethereum-<network>` node), `publicnodeFallback: true`, `builderApi: false`, `serviceMonitor` with `release: monitoring` (the Stack's Prometheus), and `statusReaders` for Hermes (`hermes-obol-agent/hermes`). Override everything that is user-specific on the command line so it's visible:
 
 ```bash
-obol helm upgrade --install dv-pod-hoodi obol/dv-pod --version 0.22.0 \
+obol helm upgrade --install dv-pod-hoodi obol/dv-pod --version 0.23.0 \
   -n dv-pod --create-namespace \
   -f ./dv-pod-chart/dv-pod/values-examples/obol-stack.yaml \
   --set network=hoodi \
@@ -47,7 +47,7 @@ The beacon node defaults to `ethereum-hoodi`'s. If `obol network list` shows the
 That is the Launchpad route, and also step 1 of the direct route: the pod needs to exist to have an ENR, and in Launchpad mode it just waits (`WaitingForInvite`). Once the creator has published the definition containing that ENR, switch the same release to it — the ENR identity is kept on upgrade, and restarting a pod that hasn't done its DKG is harmless:
 
 ```bash
-obol helm upgrade dv-pod-hoodi obol/dv-pod --version 0.22.0 -n dv-pod --reuse-values \
+obol helm upgrade dv-pod-hoodi obol/dv-pod --version 0.23.0 -n dv-pod --reset-then-reuse-values \
   --set mode=definition --set dkg.definition.configHash=0xCONFIG_HASH --timeout=10m
 ```
 
@@ -107,7 +107,7 @@ context, a Helm value or a command line. So never ask for it in chat, and never 
    obol kubectl create secret generic obol-monitoring -n dv-pod --from-file=token="$f" \
      --dry-run=client -o yaml | obol kubectl apply -f - >/dev/null && echo stored
    obol kubectl get secret obol-monitoring -n dv-pod -o name   # presence check: name only, never -o yaml/json
-   obol helm upgrade dv-pod-hoodi obol/dv-pod --version 0.22.1 -n dv-pod --reuse-values \
+   obol helm upgrade dv-pod-hoodi obol/dv-pod --version 0.23.0 -n dv-pod --reset-then-reuse-values \
      --set centralMonitoring.enabled=true --set centralMonitoring.existingSecret=obol-monitoring \
      --set charon.nickname=<confirmed nickname> --timeout=10m
    ```

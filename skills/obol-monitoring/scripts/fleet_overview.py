@@ -122,6 +122,18 @@ def main():
         except (ValueError, TypeError):
             pass
 
+    # Active stake: compounding (0x02) validators hold up to 2048 ETH, so validator counts understate
+    # stake. All peers report the same balances, so take one value per pubkey.
+    stake_map = {}
+    for d in pq(
+        f'sum by (cluster_name) (max by (cluster_name, pubkey) '
+        f'(core_scheduler_validator_balance_gwei{{cluster_network="{net}"}})) / 1e9'
+    ):
+        try:
+            stake_map[d["metric"].get("cluster_name", "?")] = round(float(d["value"][1]))
+        except (ValueError, TypeError):
+            pass
+
     # 6. Failure rates
     print("  Failure rates...", file=sys.stderr)
     failure_rates = {}
@@ -217,6 +229,7 @@ def main():
             "size": size,
             "threshold": threshold,
             "validators": validators,
+            "active_stake_eth": stake_map.get(cn, 0),
             "attester_success_pct": success_pct,
             "failure_reasons": failure_rates.get(cn, {}),
             "bn_clients": bn_counts,
@@ -263,6 +276,12 @@ def main():
             {"name": cn, "success_pct": c["attester_success_pct"], "validators": c["validators"],
              "category": c["category"]}
             for cn, c in worst
+        ],
+        "largest_clusters": [
+            {"name": cn, "active_stake_eth": c["active_stake_eth"], "validators": c["validators"],
+             "success_pct": c["attester_success_pct"]}
+            for cn, c in sorted(clusters.items(), key=lambda x: -x[1]["active_stake_eth"])[:10]
+            if c["active_stake_eth"] > 0
         ],
         "top_failure_reasons": dict(sorted(agg_reasons.items(), key=lambda x: -x[1])[:15]),
         "loki_coverage": {

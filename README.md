@@ -83,11 +83,8 @@ Claude picks the right skill from your request, or you can call one directly wit
 | [`test-a-dv-cluster`](skills/test-a-dv-cluster/SKILL.md) | Run `charon alpha test` suites against a node or cluster | A running Charon, or Docker |
 | [`dvpod`](skills/dvpod/SKILL.md) | Deploy, upgrade, back up, and troubleshoot a DV on Kubernetes or in the Obol Stack (Launchpad or direct-definition routes) | `kubectl`, `helm` (or `obol`), a synced beacon node |
 | [`dvpod-monitoring`](skills/dvpod-monitoring/SKILL.md) | Query a deployed DVpod's metrics and logs (read-only) | `kubectl`, `helm` |
-| [`obol-monitoring`](skills/obol-monitoring/SKILL.md) | Triage cluster health and duty failures in Obol's hosted Grafana | Python 3.6+, `OBOL_GRAFANA_API_TOKEN` |
+| [`obol-monitoring`](skills/obol-monitoring/SKILL.md) | Diagnose clusters, nodes and the fleet in Obol's hosted Grafana: missed duties, offline peers, slot timelines, the biggest clusters' easy wins | Python 3.6+, `OBOL_GRAFANA_API_TOKEN` |
 | [`run-obol-stack`](skills/run-obol-stack/SKILL.md) | Install, operate, and sell paid agent services from the Obol Stack; sync a node and run your part of a DV in it | Docker, a model provider |
-| [`autoresearch`](skills/autoresearch/SKILL.md) | Run autoresearch GPU experiments and publish/sell the best checkpoint | GPU, Python 3, `uv`, `ollama`; `obol` to sell |
-| [`autoresearch-worker`](skills/autoresearch-worker/SKILL.md) | Sell GPU time as a paid autoresearch experiment worker | GPU host, Python 3 + `uv` or Docker, Obol Stack |
-| [`autoresearch-coordinator`](skills/autoresearch-coordinator/SKILL.md) | Discover paid GPU workers via ERC-8004 and run experiments across them | Python 3; Obol Stack agent wallet to pay |
 | [`distributed-validators`](skills/distributed-validators/SKILL.md) | Check DV cluster health, validator performance, operators and exits via the Obol API (read-only) | The bundled Obol MCP server (needs [`uv`](https://docs.astral.sh/uv/)), or `curl` |
 | [`dv-steward`](skills/dv-steward/SKILL.md) | Let the Obol Stack's Hermes agent watch your local node and dv-pods on a schedule and alert you (read-only) | Obol Stack, Hermes |
 
@@ -108,7 +105,7 @@ Sync hoodi in my Obol Stack, install a dv-pod for my operator address, and join 
 
 ### Bundled MCP server
 
-The plugin starts the [Obol MCP server](https://github.com/ObolNetwork/obol-mcp) (`uvx obol-mcp`), which gives Claude read-only tools for the public Obol API: cluster locks, validator effectiveness and states, exit progress and operators. It validates every identifier, rate limits, and trims large responses, so prefer it over raw `curl`. It needs [`uv`](https://docs.astral.sh/uv/); without it the server shows as failed in `/mcp` and `distributed-validators` falls back to `curl`.
+The plugin starts the [Obol MCP server](https://github.com/ObolNetwork/obol-mcp) (`uvx obol-mcp`), which gives Claude read-only tools for the public Obol API: cluster locks, validator effectiveness and states, exit progress and operators. It validates every identifier, rate limits, and trims large responses, so prefer it over raw `curl`. It needs [`uv`](https://docs.astral.sh/uv/); without it the server shows as failed in `/mcp` and `distributed-validators` falls back to `curl`. `distributed-validators` is built on it; `create-cluster-invitation` uses it to check a lock or definition before a deposit, and `obol-monitoring` uses it for who-is-this questions next to Grafana's how-is-it-behaving ones.
 
 ## Adding New Skills
 

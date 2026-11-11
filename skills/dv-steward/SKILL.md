@@ -1,6 +1,6 @@
 ---
 name: dv-steward
-description: "Steward this Obol Stack's own distributed validator: watch the local Ethereum EL/CL and dv-pods (sync, peers, charon readiness, duties, DKG status, restarts, disk) on a schedule and alert the operator, e.g. on Telegram. Strictly read-only: never touches keys or restarts anything. For public cluster data (effectiveness, exits) use distributed-validators."
+description: "Steward this Obol Stack's own distributed validator on a schedule: have the Stack's agent watch the local Ethereum EL/CL and dv-pods (sync, peers, charon readiness, duties, DKG status, restarts, disk) and alert the operator, e.g. on Telegram. Use when the user wants ongoing monitoring, a cron health check or alerts for their Stack node, not a one-off look. Strictly read-only: never touches keys or restarts anything. For a one-off query of a running dv-pod use `dvpod-monitoring`; for public cluster data (effectiveness, exits) use `distributed-validators`."
 ---
 
 # DV Steward
