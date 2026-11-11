@@ -54,7 +54,7 @@ In the Obol Stack the beacon suite targets the in-cluster node: `--endpoints=htt
 
 ```bash
 # No running container — one-shot via docker image
-docker run --rm obolnetwork/charon:v1.11.0 alpha test infra --publish   # match the cluster's Charon version
+docker run --rm obolnetwork/charon:v1.11.4 alpha test infra --publish   # match the cluster's Charon version
 ```
 
 ## Key flags (apply to every suite)

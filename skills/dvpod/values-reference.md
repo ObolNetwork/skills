@@ -1,6 +1,6 @@
 # DVpod Values Reference
 
-The values that matter most for `dv-pod` chart **0.22.x** (charon `v1.11.0`). The chart's [values.yaml](https://github.com/ObolNetwork/helm-charts/blob/main/charts/dv-pod/values.yaml) and README are the source of truth; read them for anything not listed. The schema is strict: unknown keys fail `helm install`.
+The values that matter most for `dv-pod` chart **0.23.x** (charon `v1.11.3`). The chart's [values.yaml](https://github.com/ObolNetwork/helm-charts/blob/main/charts/dv-pod/values.yaml) and README are the source of truth; read them for anything not listed. The schema is strict: unknown keys fail `helm install`.
 
 ## Essentials
 
@@ -12,7 +12,7 @@ The values that matter most for `dv-pod` chart **0.22.x** (charon `v1.11.0`). Th
 | `charon.beaconNodeEndpoints` | Synced beacon API(s); all are called for every request. Empty = the Obol Stack's node for `network` (`http://ethereum-beacon.ethereum-<network>.svc.cluster.local:5052`); **set it** outside the Stack or when the Stack deployment has another id. | `[]` |
 | `charon.fallbackBeaconNodeEndpoints` | Used when the primaries fail | `[]` |
 | `charon.publicnodeFallback` | With no fallbacks set, fall back to publicnode.com's beacon API for `network` | `true` |
-| `image.tag` | Charon version (also runs the DKG with `dkg.runner: charon`) | `v1.11.0` |
+| `image.tag` | Charon version (also runs the DKG with `dkg.runner: charon`) | `v1.11.3` (the chart's `appVersion`) |
 
 ## Modes
 
@@ -124,6 +124,11 @@ Secret precedence: `existingSecret.name` → the Secret the release already moun
 | validator client | 500m / 1000m | 1Gi / 2Gi |
 | dkg-sidecar | 50m / 200m | 128Mi / 256Mi |
 | charon-dkg (`dkg.resources`) | 100m / 1000m | 256Mi / 1Gi |
+| central-monitoring Prometheus (`centralMonitoring.resources`, 0.23+) | 50m / — | 128Mi / 512Mi |
+| busybox init containers (`initContainerResources`, 0.23+) | 10m / — | 16Mi / 128Mi |
+| ENR generation job (`charon.enr.generate.resources`, 0.23+) | 10m / — | 32Mi / 256Mi |
+
+Since 0.23 every container has a memory limit. `containerSecurityContext` (charon) defaults to `runAsNonRoot`, `runAsUser: 1000`, `seccompProfile: RuntimeDefault`; keep charon non-root and without `CAP_SYS_ADMIN` if overriding it.
 
 ## Network → chain ID
 

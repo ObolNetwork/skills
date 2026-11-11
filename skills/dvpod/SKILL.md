@@ -45,7 +45,7 @@ You help users deploy and operate one operator's share of an Obol Distributed Va
 ## Context
 
 - Chart: [helm-charts/charts/dv-pod](https://github.com/ObolNetwork/helm-charts/tree/main/charts/dv-pod) (README, QUICKSTART, TROUBLESHOOT, `values-examples/`), published at `https://obolnetwork.github.io/helm-charts`. Defer to the chart's README for anything this skill doesn't cover.
-- This skill targets chart **0.22.x** (charon `v1.11.0`, sidecar `obolnetwork/charon-dkg-sidecar:1.1.0`). 0.22.0 needs that sidecar tag published; if it isn't, see the availability gate in [obol-stack.md](obol-stack.md) — it applies outside the Stack too.
+- This skill targets chart **0.23.x** (charon `v1.11.3`, sidecar `obolnetwork/charon-dkg-sidecar:1.1.0`). Since 0.23 the charon container (`-c dv-pod`) sees an **empty, read-only `validator_keys/`**: back up and run key-share commands as described below, never through `-c dv-pod`. For the sidecar availability gate (0.22+), see [obol-stack.md](obol-stack.md); it applies outside the Stack too.
 - References: [values-reference.md](values-reference.md), [examples.md](examples.md), [troubleshooting.md](troubleshooting.md), [discovery.md](discovery.md) (namespace / release / pod resolution, shared with `dvpod-monitoring`).
 
 ```bash
@@ -72,14 +72,14 @@ Choose the route with the `create-cluster-invitation` skill; it hands you `netwo
 2. **Route / mode** and its value: the **operator address** (Launchpad: the exact address that will sign on the Launchpad) or the **config hash / URL / definition file** (direct).
 3. **Beacon node** — a synced beacon API for that network. In the Obol Stack the chart defaults to `http://ethereum-beacon.ethereum-<network>.svc.cluster.local:5052` (the id `obol network install ethereum --network <network>` gives a first deployment); check `obol network list` and set `charon.beaconNodeEndpoints` only if the id differs. Confirm it is synced before installing; a pod on an unsynced node only runs on the publicnode fallback.
 4. **Release name and namespace** — you may propose `dv-pod-<network>` in namespace `dv-pod` and confirm. A release name containing `dv-pod` keeps `<fullname>` = release name.
-5. **Chart version** — always `--version <x.y.z>` explicitly (0.22.0 below). Never let Helm pick "latest".
+5. **Chart version** — always `--version <x.y.z>` explicitly (0.23.0 below). Never let Helm pick "latest".
 
 Optional: validator client type (`lighthouse` default; teku, prysm, nimbus, lodestar), `charon.builderApi` (true only if the beacon node has a builder/MEV-boost; must match the cluster; always false in the Obol Stack), `charon.nickname`, monitoring (`serviceMonitor`, `centralMonitoring`, `charon.lokiAddresses` — see values-reference).
 
 ### Launchpad route
 
 ```bash
-helm upgrade --install dv-pod-hoodi obol/dv-pod --version 0.22.0 \
+helm upgrade --install dv-pod-hoodi obol/dv-pod --version 0.23.0 \
   --namespace dv-pod --create-namespace \
   --set mode=launchpad \
   --set network=hoodi \
@@ -95,7 +95,7 @@ Add `--set charon.dkgSidecar.targetConfigHash=<hash>` to join one specific invit
 The pod must exist first so it has an ENR: install it as above (it waits in `WaitingForInvite`), send its ENR to the cluster creator, then point it at the definition. The ENR identity is kept on upgrade:
 
 ```bash
-helm upgrade dv-pod-hoodi obol/dv-pod --version 0.22.0 -n dv-pod --reuse-values \
+helm upgrade dv-pod-hoodi obol/dv-pod --version 0.23.0 -n dv-pod --reset-then-reuse-values \
   --set mode=definition \
   --set dkg.definition.configHash=<config-hash> \
   --timeout=10m
@@ -162,10 +162,17 @@ Patterns and fixes: [troubleshooting.md](troubleshooting.md) and the chart's TRO
 helm get values <release> -n <ns>
 helm list -n <ns>                                   # current chart version
 helm search repo obol/dv-pod --versions | head      # read the chart changelog/README "Upgrading" first
-helm upgrade <release> obol/dv-pod -n <ns> --version <chart-version> --reuse-values [--set k=v] --timeout=10m
+helm upgrade <release> obol/dv-pod -n <ns> --version <chart-version> --reset-then-reuse-values [--set k=v] --timeout=10m
 ```
 
-Always `--reuse-values` (unless the user wants a reset) and an explicit `--version`. Upgrading from < 0.22: don't until `charon-dkg-sidecar:1.1.0` is published (init containers run on every start); unknown keys now fail the strict schema; see the chart README "Upgrading from chart < 0.22". During a pending DKG, every operator should be on the same runner and charon version.
+Always pass an explicit `--version`. Use `--reset-then-reuse-values` (Helm 3.14+; the Obol Stack ships Helm 4): it keeps the user's overrides but picks up the new chart's defaults, which plain `--reuse-values` silently drops. Read the chart README's "Upgrading" section for every version you cross. During a pending DKG, every operator should be on the same runner and charon version.
+
+- **From < 0.22**: don't until `charon-dkg-sidecar:1.1.0` is published (init containers run on every start); unknown keys now fail the strict schema.
+- **From < 0.23**: the charon container stops seeing the key shares. `containerSecurityContext` gains `runAsNonRoot`, `runAsUser: 1000` and `seccompProfile: RuntimeDefault`. If the user overrides it, keep charon non-root and without `CAP_SYS_ADMIN`, or it could unmount the tmpfs that hides the key shares. The rolling update only replaces a **Ready** pod, so check afterwards that this prints nothing:
+  ```bash
+  kubectl exec <fullname>-0 -n <ns> -c dv-pod -- ls -A /charon-data/validator_keys
+  ```
+  If it lists files, the pod kept the old spec: delete the pod (`kubectl delete pod <fullname>-0 -n <ns>`) so it restarts on the new one. Restarting skips a few duties, so tell the user first.
 
 ## Action: enr
 
@@ -180,16 +187,22 @@ Format ENRs clearly; the user will paste them.
 
 **Confirm the destination first.** The backup holds key shares; anyone with it can sign as this operator. Steer away from cloud-synced folders and git repos; recommend encryption or offline storage.
 
+Copy from the **`validator-client` container**: since chart 0.23 the charon container (`dv-pod`) sees an empty `validator_keys/`, so a copy from it has no key shares.
+
 ```bash
 umask 077
 dest=~/charon-backup-<release>-$(date +%Y%m%d)
 mkdir -p "$dest"
-kubectl cp <ns>/<fullname>-0:/charon-data "$dest" -c dv-pod
+kubectl cp <ns>/<fullname>-0:/charon-data "$dest" -c validator-client
 chmod -R go-rwx "$dest"
-ls -la "$dest"        # list only, never cat key files
+ls -la "$dest" "$dest/validator_keys"   # list only, never cat key files; validator_keys must list keystore-*.json
 ```
 
+If `validator_keys/` comes back empty, the backup has no key shares: stop and say so. With `validatorClient.enabled: false`, or the Prysm validator client (its image has no `tar`, which `kubectl cp` needs), copy from a short-lived pod that mounts the PVC read-only on the same node. The recipe is in the chart README's "Backing up charon-data" section.
+
 Expected after the DKG: `cluster-lock.json`, `cluster-definition.json`, `deposit-data*.json`, `validator_keys/`. The ENR key lives in the ENR Secret (`.data.secretName` in the ENR ConfigMap names it): have the user export it themselves, never print it. PVCs and the ENR Secret survive `helm uninstall`.
+
+**Key-share commands** (`charon exit sign`, `charon edit …`) no longer work through `kubectl exec -c dv-pod` on 0.23+, since charon can't see the key shares. Run them with a local charon of the same version against a backup copy of `charon-data`.
 
 ## Action: recover
 

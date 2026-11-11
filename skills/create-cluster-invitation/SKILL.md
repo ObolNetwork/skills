@@ -48,7 +48,7 @@ Will every operator sign with a wallet on the DV Launchpad?
 
 Charon's DKG rejects peers on a different **minor** version, and a definition must be one every operator's charon understands. Before `create dkg`:
 
-1. Get every operator's charon version. dv-pod: `obol kubectl get pod <fullname>-0 -n <ns> -o jsonpath='{.spec.containers[?(@.name=="dv-pod")].image}'` (chart 0.22 runs the DKG with that same image; 0.21+ ships `v1.11.0`). CDVN/LCDVN: their `.env` `CHARON_VERSION`.
+1. Get every operator's charon version. dv-pod: `obol kubectl get pod <fullname>-0 -n <ns> -o jsonpath='{.spec.containers[?(@.name=="dv-pod")].image}'` (the chart runs the DKG with that same image; chart 0.23 ships `v1.11.3`). CDVN/LCDVN: their `.env` `CHARON_VERSION`.
 2. All must share one minor (e.g. all `v1.11.x`). If not, get them aligned first — don't "try it and see".
 3. Create the definition with the same minor (`obolnetwork/charon:v1.11.x create dkg`; v1.11 writes definition version `v1.11.0` by default). Check `jq -r .version .charon/cluster-definition.json`.
 4. Don't let anyone upgrade charon between definition and DKG.
@@ -77,13 +77,13 @@ The withdrawal address is burned into the deposit data; a mistake means a re-DKG
 ## Create the definition with `charon create dkg` (Docker)
 
 Before any Docker command:
-- **Pin the image** to the minor from the version gate (`obolnetwork/charon:v1.11.0` below). Never `:latest` for anything that touches keys.
+- **Pin the image** to the minor from the version gate (`obolnetwork/charon:v1.11.4` below). Never `:latest` for anything that touches keys.
 - **Run from a dedicated, private directory** — not a git repository (`git rev-parse --is-inside-work-tree` must not print `true`) or a cloud-synced folder. Afterwards `chmod -R go-rwx .charon`.
 
 **Route 1 (address mode)** — `--publish` is mandatory here (`create dkg` refuses addresses without it):
 
 ```bash
-docker run --rm -v "$(pwd):/opt/charon" obolnetwork/charon:v1.11.0 \
+docker run --rm -v "$(pwd):/opt/charon" obolnetwork/charon:v1.11.4 \
   create dkg \
   --name "My Cluster" \
   --network hoodi \
@@ -100,7 +100,7 @@ It prints the Launchpad link (`https://<network.>launchpad.obol.org/dv#0x<config
 **Route 2 (ENR mode)** — collect every operator's pod ENR first:
 
 ```bash
-docker run --rm -v "$(pwd):/opt/charon" obolnetwork/charon:v1.11.0 \
+docker run --rm -v "$(pwd):/opt/charon" obolnetwork/charon:v1.11.4 \
   create dkg \
   --name "My Cluster" \
   --network hoodi \
@@ -112,7 +112,7 @@ docker run --rm -v "$(pwd):/opt/charon" obolnetwork/charon:v1.11.0 \
   --publish
 ```
 
-Operators not running a dv-pod generate their ENR with `docker run --rm -v "$(pwd):/opt/charon" obolnetwork/charon:v1.11.0 create enr` (the `.charon/charon-enr-private-key` it writes stays secret; only the printed ENR is shared).
+Operators not running a dv-pod generate their ENR with `docker run --rm -v "$(pwd):/opt/charon" obolnetwork/charon:v1.11.4 create enr` (the `.charon/charon-enr-private-key` it writes stays secret; only the printed ENR is shared).
 
 **What `--publish` does** (charon v1.11 `cmd/createdkg.go`): it generates a throwaway creator key, uses it to sign Obol's terms and conditions and the definition **off-chain**, and posts both to the Obol API. No wallet, no gas, no on-chain transaction. The config hash it prints is how everyone fetches and cross-checks the same definition — recommend it on both routes. Skip it only for pure local testing (then share the file and use `dkg.definition.configMap`).
 
@@ -138,7 +138,7 @@ Give the `dvpod` skill (once per operator) exactly this; don't let it guess:
 - **Docker / CDVN operators**: each runs, at the same time:
   ```bash
   docker run --rm --net=host -v "$(pwd)/.charon:/opt/charon/.charon" \
-    obolnetwork/charon:v1.11.0 dkg --publish
+    obolnetwork/charon:v1.11.4 dkg --publish
   ```
   (add `--definition-file=https://api.obol.tech/v1/definition/0x<config_hash>` in ENR mode if the file isn't local).
 
