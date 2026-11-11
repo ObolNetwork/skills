@@ -95,8 +95,44 @@ def main():
             "timeout_pct": round((total_to / total * 100) if total > 0 else 0, 2),
         }
 
+    # Average decided round: 1.0 is ideal. A peer that is offline leads round 1 in about 1 of n
+    # instances, which then times out to round 2, so expect about 1 + offline/n.
+    rounds_r = pq(f'quantile(0.5, avg_over_time(core_consensus_decided_rounds{{{sel},duty="attester"}}[{window}]))')
+    if rounds_r:
+        try:
+            consensus.setdefault("attester", {})["avg_decided_round"] = round(float(rounds_r[0]["value"][1]), 3)
+        except (ValueError, TypeError):
+            pass
+
     # 5. Participation
     print("  Participation...", file=sys.stderr)
+    # Every peer's attester participation as the reporting peers see it, so peers that send no
+    # metrics are covered too. Median across reporters, which may differ on a few duties.
+    roster = {}
+    succ = {d["metric"].get("peer", "?"): float(d["value"][1]) for d in pq(
+        f'quantile by (peer) (0.5, increase(core_tracker_participation_success_total{{{sel},duty="attester"}}[{window}]))')}
+    for d in pq(f'quantile by (peer) (0.5, increase(core_tracker_participation_expected_total{{{sel},duty="attester"}}[{window}]))'):
+        peer = d["metric"].get("peer", "?")
+        expected = float(d["value"][1])
+        if expected <= 0:
+            continue
+        rate = succ.get(peer, 0.0) / expected
+        if rate < 0.1:
+            status = "offline"
+        elif rate < 0.9:
+            status = "degraded"
+        elif peer in observed_peers:
+            status = "ok"
+        else:
+            status = "ok_no_metrics"  # participates, but sends no metrics to Obol
+        roster[peer] = {"status": status, "attester_success_pct": round(rate * 100, 2)}
+    # Nicknames are what operators recognise; peer_nickname is the peer's, nickname the reporter's.
+    for d in pq(f"group by (peer, peer_nickname) (last_over_time(app_peerinfo_nickname{{{sel}}}[{window}]))"):
+        peer = d["metric"].get("peer", "?")
+        if peer in roster and d["metric"].get("peer_nickname"):
+            roster[peer]["nickname"] = d["metric"]["peer_nickname"]
+    offline_peers = sorted(p for p, v in roster.items() if v["status"] == "offline")
+
     participation = {}
     for d in pq(f'sum(rate(core_tracker_participation_missed_total{{{sel},duty="attester"}}[{window}])) by (cluster_peer, peer) * 3600'):
         src = d["metric"].get("cluster_peer", "?")
@@ -118,6 +154,17 @@ def main():
         val = float(d["value"][1])
         if val > 0:
             failure_reasons.setdefault(duty, {})[reason] = round(val, 1)
+
+    # A reason series only exists on nodes that hit it: name the reporters when not all of them
+    # see it, since a node-local problem otherwise reads as a cluster-wide one.
+    reporters = {}
+    for d in pq(f'sum(increase(core_tracker_failed_duty_reasons_total{{{sel}}}[{window}])) by (duty, reason, cluster_peer) > 0'):
+        m = d["metric"]
+        reporters.setdefault((m.get("duty", "?"), m.get("reason", "?")), set()).add(m.get("cluster_peer", "?"))
+    failure_reporters = {}
+    for (duty, reason), peers in reporters.items():
+        if len(peers) < len(observed_peers):
+            failure_reporters.setdefault(duty, {})[reason] = sorted(peers)
 
     # 7. P2P
     print("  P2P connectivity...", file=sys.stderr)
@@ -186,9 +233,11 @@ def main():
     # Determine overall health
     attester_fail = consensus.get("attester", {}).get("timeout_pct", 0)
     any_readyz_bad = any(v != 1 for v in readyz.values())
-    if attester_fail > 10 or any_readyz_bad:
+    # Peers that participate in no duties already use up fault tolerance.
+    effective_ft = size - threshold - len(offline_peers)
+    if attester_fail > 10 or any_readyz_bad or effective_ft <= 0:
         overall = "critical"
-    elif attester_fail > 2:
+    elif attester_fail > 2 or offline_peers:
         overall = "degraded"
     else:
         overall = "healthy"
@@ -200,6 +249,7 @@ def main():
             "operators": size,
             "threshold": threshold,
             "fault_tolerance": size - threshold,
+            "effective_fault_tolerance": effective_ft,
             "validators": validators,
             "observed_peers": len(observed_peers),
             "missing_peers": missing_count,
@@ -207,11 +257,14 @@ def main():
         "health": {
             "overall": overall,
             "readyz": readyz,
+            "offline_peers": offline_peers,
         },
+        "peer_roster": roster,
         "versions": versions,
         "consensus": consensus,
         "participation_missed": participation,
         "duty_failures": failure_reasons,
+        "duty_failure_reporters": failure_reporters,
         "p2p": p2p,
         "beacon_node": beacon_node,
         "balance": {
