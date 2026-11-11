@@ -1,6 +1,6 @@
 ---
 name: distributed-validators
-description: "Look up Distributed Validator clusters in the public Obol API: a cluster's operators and threshold from its lock_hash or config_hash, validator effectiveness and beacon states, exit signing progress, an operator's clusters, badges and Techne credentials, staked positions for a withdrawal address, and network-wide cluster lists. Use when the user gives a lock hash, config hash or operator address, or asks how an Obol cluster or operator is doing. Read-only. To create a cluster use `create-cluster-invitation`; to deploy or debug a node use `dvpod`; for a node's own metrics and logs use `dvpod-monitoring` or `obol-monitoring`."
+description: "Look up Distributed Validator clusters and operators in the public Obol API (no credentials; uses the bundled Obol MCP tools, or curl): a cluster's operators and threshold from its lock_hash, config_hash or name, validator effectiveness scores and beacon states, exit signing progress, who runs a charon peer (nickname, operator address, last seen), an operator's clusters, badges and Techne credentials, staked positions for a withdrawal address, and network-wide cluster lists. Use when the user gives a lock hash, config hash, cluster name or operator address, asks for a cluster's effectiveness or exit status, or asks who an operator or peer is. Read-only. For why a cluster misses duties or which node is slow (Obol's Grafana metrics and logs) use `obol-monitoring`; to create a cluster use `create-cluster-invitation`; to deploy or debug a node use `dvpod`."
 ---
 
 # Distributed Validators
@@ -70,6 +70,7 @@ Networks: `mainnet`, `hoodi` (main testnet), `sepolia`, `gnosis`. Holesky is shu
 | Badges / Techne / incentives / terms | `obol_operator_badges` / `obol_operator_techne` / `obol_operator_incentives` / `obol_terms_signed_status` | `/v1/address/badges/{address}` / `/v1/address/techne/{address}` / `/v1/address/incentives/{network}/{address}` / `/v1/termsAndConditions/{address}` |
 | Staked positions of a withdrawal or fee recipient address | `obol_positions` | POST `/v1/positions/{network}/{address}` with `{}` (a read-only lookup) |
 | OWR contract recipients | `obol_owr_tranches` | `/v1/owr/{network}/{address}` |
+| Who runs each peer: charon peer name, nickname, operator address, node index, when last seen | — (`curl` only for now) | `/v1/lock/{lockHash}/peer-info` (add `?client-details=true` for charon/BN/VC/EL versions) |
 | Find a cluster by name or partial hash | `obol_cluster_search` | `/v1/lock/search/{network}?partialClusterName=…&limit=5` (or `partialLockHash=`, at least 4 hex) |
 | Clusters on a network | `obol_locks_by_network` | `/v1/lock/network/{network}?sortBy=avg_effectiveness&limit=10` |
 | Operators on a network | `obol_operator_info`, `obol_search_operators` | `/v1/address/network/{network}?limit=50`, `/v1/address/search/{network}?partialAddress=…` |
