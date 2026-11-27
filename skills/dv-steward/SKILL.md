@@ -41,7 +41,7 @@ Query Prometheus with `curl -sG $PROM/api/v1/query --data-urlencode 'query=<prom
 | Pods | `pods -n <dv-ns>`, `pods -n ethereum-<id>` | Running, restarts flat | restarts increased | `CrashLoopBackOff`, `Pending`, `OOMKilled` (`LAST-EXIT`) |
 | Disk | `node_filesystem_avail_bytes / node_filesystem_size_bytes` for `mountpoint=~"/data\|/"`; `pvcs -A` | > 20 % free | 10–20 % | < 10 %, or "no space left" in logs |
 
-Expected, not alarming: `WaitingForInvite` / `WaitingForSignatures` before the DKG, no duties before validators are active (`core_scheduler_validators_active` = 0), syncing on a fresh node. Report those as progress, not alerts. On a transition to `Complete`, alert once: lock hash, validator count, and "back up `/charon-data` and run the pre-deposit checks before depositing".
+Expected, not alarming: `WaitingForDefinition` with no pod (chart 0.24+ `mode: enr`: only the ENR is published, so there is no pod to find; read the `<fullname>-dkg-status` ConfigMap in namespace `dv-pod-<id>` when the human names the release), `WaitingForInvite` / `WaitingForSignatures` before the DKG, no duties before validators are active (`core_scheduler_validators_active` = 0), syncing on a fresh node. Report those as progress, not alerts. On a transition to `Complete`, alert once: lock hash, validator count, and "back up `/charon-data` and run the pre-deposit checks before depositing".
 
 For logs behind a WARN/CRIT: `python3 $KUBE logs <pod> -n <ns> -c dv-pod --since 30m` (charon; init containers `dkg-sidecar`, `charon-dkg`, `dkg-report`), `-c validator-client`, `--previous` after a crash. Quote at most a few lines.
 

@@ -10,7 +10,7 @@ description: |
   DVpod, use the `dvpod-monitoring` skill instead.
 user-invocable: true
 disable-model-invocation: false
-allowed-tools: Read, Grep, Glob, Bash(kubectl get pods *), Bash(kubectl get pod *), Bash(kubectl get svc *), Bash(kubectl get pvc *), Bash(kubectl get jobs *), Bash(kubectl get events *), Bash(kubectl logs *), Bash(kubectl wait *), Bash(helm list *), Bash(helm get values *), Bash(helm search repo *), Bash(obol kubectl get pods *), Bash(obol kubectl get pod *), Bash(obol kubectl get svc *), Bash(obol kubectl get pvc *), Bash(obol kubectl get jobs *), Bash(obol kubectl get events *), Bash(obol kubectl logs *), Bash(obol kubectl wait *), Bash(obol helm list *), Bash(obol helm get values *), Bash(obol helm search repo *), Bash(obol network status*), Bash(obol network list*)
+allowed-tools: Read, Grep, Glob, Bash(kubectl get pods *), Bash(kubectl get pod *), Bash(kubectl get svc *), Bash(kubectl get pvc *), Bash(kubectl get jobs *), Bash(kubectl get events *), Bash(kubectl logs *), Bash(kubectl wait *), Bash(helm list *), Bash(helm get values *), Bash(helm search repo *), Bash(obol kubectl get pods *), Bash(obol kubectl get pod *), Bash(obol kubectl get svc *), Bash(obol kubectl get pvc *), Bash(obol kubectl get jobs *), Bash(obol kubectl get events *), Bash(obol kubectl logs *), Bash(obol kubectl wait *), Bash(obol helm list *), Bash(obol helm get values *), Bash(obol helm search repo *), Bash(obol network status*), Bash(obol network list*), Bash(obol app list*), Bash(obol app secret list *)
 argument-hint: "[action] [options] — actions: deploy, status, logs, troubleshoot, upgrade, backup, recover, enr, destroy"
 ---
 
@@ -18,18 +18,19 @@ argument-hint: "[action] [options] — actions: deploy, status, logs, troublesho
 
 You help users deploy and operate one operator's share of an Obol Distributed Validator with the `dv-pod` Helm chart.
 
-**In the Obol Stack, read [obol-stack.md](obol-stack.md) first** — it adds the gates (chart/sidecar availability, node sync, MEV) and replaces every `helm`/`kubectl` here with `obol helm`/`obol kubectl`. Never use the user's default kubeconfig for a Stack.
+**In the Obol Stack, read [obol-stack.md](obol-stack.md) first** — on obol v0.19+ a dv-pod is installed with `obol app install` and changed through its values.yaml + `obol app sync` (never `obol helm upgrade` on it), in namespace `dv-pod-<id>`; it also adds the gates (chart availability, node sync, MEV, Gloas) and replaces every `helm`/`kubectl` here with `obol helm`/`obol kubectl`. Never use the user's default kubeconfig for a Stack.
 
 ## Safety Rules
 
 **ALWAYS ask for user confirmation before:**
-- `helm uninstall`, deleting PVCs, or deleting ENR Secrets (an ENR key in a cluster is **irrecoverable** if lost)
-- `helm upgrade` of a release whose validators are active (restarts the pod and misses duties; on mainnet that costs rewards)
+- `helm uninstall`, `obol app delete`, deleting PVCs, or deleting ENR Secrets (an ENR key in a cluster is **irrecoverable** if lost); `obol app delete --delete-data` destroys key shares and the ENR key
+- `helm upgrade` / `obol app sync` of a release whose validators are active (restarts the pod and misses duties; on mainnet that costs rewards), and `obol app sync --force` (reverts changes someone made with helm)
+- Switching a release that has done its DKG to another `mode`; **never** switch a running validator to `mode: enr` (it scales the pod to zero)
 - Restoring keys or a cluster-lock into a pod (`recover`) — see the slashing check there
 - Anything that could cause key loss or slashing
 
 **You MAY proceed autonomously for:**
-- `helm upgrade --install` of a **new** release that has not completed its DKG
+- `helm upgrade --install` / `obol app install` + `obol app sync` of a **new** release that has not completed its DKG
 - Reading logs, pod status, and the public ConfigMaps `<fullname>-enr` / `<fullname>-dkg-status`
 - Reading the **public** `enr` field of an ENR Secret (charts < 0.22 only)
 - Creating namespaces, adding helm repos, `helm test`, port-forwarding for debugging
@@ -45,7 +46,7 @@ You help users deploy and operate one operator's share of an Obol Distributed Va
 ## Context
 
 - Chart: [helm-charts/charts/dv-pod](https://github.com/ObolNetwork/helm-charts/tree/main/charts/dv-pod) (README, QUICKSTART, TROUBLESHOOT, `values-examples/`), published at `https://obolnetwork.github.io/helm-charts`. Defer to the chart's README for anything this skill doesn't cover.
-- This skill targets chart **0.23.x** (charon `v1.11.3`, sidecar `obolnetwork/charon-dkg-sidecar:1.1.0`). Since 0.23 the charon container (`-c dv-pod`) sees an **empty, read-only `validator_keys/`**: back up and run key-share commands as described below, never through `-c dv-pod`. For the sidecar availability gate (0.22+), see [obol-stack.md](obol-stack.md); it applies outside the Stack too.
+- This skill targets chart **0.24.x** (charon `v1.11.4`, sidecar `obolnetwork/charon-dkg-sidecar:1.1.0`); 0.24 adds `mode: enr`. Charon v1.11.x is **not Gloas-ready** (that comes with charon v2.0.0): Sepolia has already forked into Gloas, so don't start a new Sepolia DV on it, and Hoodi DVs need a newer release before Hoodi's fork (planned 2026-12-15). Since 0.23 the charon container (`-c dv-pod`) sees an **empty, read-only `validator_keys/`**: back up and run key-share commands as described below, never through `-c dv-pod`.
 - References: [values-reference.md](values-reference.md), [examples.md](examples.md), [troubleshooting.md](troubleshooting.md), [discovery.md](discovery.md) (namespace / release / pod resolution, shared with `dvpod-monitoring`).
 
 ```bash
@@ -61,6 +62,7 @@ helm search repo obol/dv-pod --versions | head
 | `launchpad` | Launchpad invite: operators sign on the Launchpad; the sidecar polls the Obol API by operator address | `charon.operatorAddress` |
 | `definition` | Direct: a `charon create dkg` definition handed over by hash, URL or file | exactly one of `dkg.definition.configHash` / `.url` / `.configMap` |
 | `lock` / `lockHash` | Import an existing cluster (no DKG) | `configMaps.clusterLock` or `charon.lockHash`, plus `validatorClient.keystores.secretName` |
+| `enr` (0.24+) | Identity only: publish this node's ENR before any definition exists. No pod runs, nothing polls the Obol API, phase `WaitingForDefinition`; later switch the same release to `definition` or `launchpad` and the ENR is kept | — |
 | `auto` (default) | Infers one of the above from the values; for existing installs | — |
 
 Choose the route with the `create-cluster-invitation` skill; it hands you `network`, mode, operator address or config hash, and the charon version every operator must share. The schema rejects missing or conflicting values at install time.
@@ -68,18 +70,18 @@ Choose the route with the `create-cluster-invitation` skill; it hands you `netwo
 ## Action: deploy
 
 ### Required inputs (ask; never invent)
-1. **Network** — `mainnet`, `sepolia`, or `hoodi`. Always pass `--set network=…` (the chart defaults to mainnet).
+1. **Network** — `mainnet` or `hoodi` (`sepolia` has forked into Gloas, which charon v1.11.x doesn't support). Always pass `--set network=…` (the chart and its Obol Stack example default to mainnet).
 2. **Route / mode** and its value: the **operator address** (Launchpad: the exact address that will sign on the Launchpad) or the **config hash / URL / definition file** (direct).
 3. **Beacon node** — a synced beacon API for that network. In the Obol Stack the chart defaults to `http://ethereum-beacon.ethereum-<network>.svc.cluster.local:5052` (the id `obol network install ethereum --network <network>` gives a first deployment); check `obol network list` and set `charon.beaconNodeEndpoints` only if the id differs. Confirm it is synced before installing; a pod on an unsynced node only runs on the publicnode fallback.
-4. **Release name and namespace** — you may propose `dv-pod-<network>` in namespace `dv-pod` and confirm. A release name containing `dv-pod` keeps `<fullname>` = release name.
-5. **Chart version** — always `--version <x.y.z>` explicitly (0.23.0 below). Never let Helm pick "latest".
+4. **Release name and namespace** — you may propose `dv-pod-<network>` in namespace `dv-pod` and confirm (in the Stack, `obol app` makes both `dv-pod-<network>`). A release name containing `dv-pod` keeps `<fullname>` = release name.
+5. **Chart version** — always `--version <x.y.z>` explicitly (0.24.0 below; `obol/dv-pod@0.24.0` with `obol app`). Never let Helm pick "latest".
 
 Optional: validator client type (`lighthouse` default; teku, prysm, nimbus, lodestar), `charon.builderApi` (true only if the beacon node has a builder/MEV-boost; must match the cluster; always false in the Obol Stack), `charon.nickname`, monitoring (`serviceMonitor`, `centralMonitoring`, `charon.lokiAddresses` — see values-reference).
 
 ### Launchpad route
 
 ```bash
-helm upgrade --install dv-pod-hoodi obol/dv-pod --version 0.23.0 \
+helm upgrade --install dv-pod-hoodi obol/dv-pod --version 0.24.0 \
   --namespace dv-pod --create-namespace \
   --set mode=launchpad \
   --set network=hoodi \
@@ -92,16 +94,25 @@ Add `--set charon.dkgSidecar.targetConfigHash=<hash>` to join one specific invit
 
 ### Direct route (definition)
 
-The pod must exist first so it has an ENR: install it as above (it waits in `WaitingForInvite`), send its ENR to the cluster creator, then point it at the definition. The ENR identity is kept on upgrade:
+The node needs an ENR before the creator can write the definition. With chart 0.24+, install it identity-only first (`mode: enr`: the ENR job runs, no pod, no Obol API polling, phase `WaitingForDefinition`):
 
 ```bash
-helm upgrade dv-pod-hoodi obol/dv-pod --version 0.23.0 -n dv-pod --reset-then-reuse-values \
+helm upgrade --install dv-pod-hoodi obol/dv-pod --version 0.24.0 \
+  --namespace dv-pod --create-namespace \
+  --set mode=enr --set network=hoodi \
+  --set 'charon.beaconNodeEndpoints[0]=<beacon-url>'
+```
+
+Send its ENR to the cluster creator, then point the **same release in the same namespace** at the definition. The ENR Secret is reused, so the shared ENR stays valid; the pod and PVCs are created now:
+
+```bash
+helm upgrade dv-pod-hoodi obol/dv-pod --version 0.24.0 -n dv-pod --reset-then-reuse-values \
   --set mode=definition \
   --set dkg.definition.configHash=<config-hash> \
   --timeout=10m
 ```
 
-Use `dkg.definition.url=<https-url>` or `dkg.definition.configMap=<name>` (`kubectl create configmap cluster-definition -n dv-pod --from-file=cluster-definition.json`) instead of a hash when the definition wasn't published. ENR-mode definitions need no signatures; address-mode ones still need every operator to sign on the Launchpad. One person running every node (a solo cluster) uses this route; the Launchpad solo flow isn't supported.
+Never park a node on a fake or placeholder Launchpad invite to get an ENR (it keeps polling the Obol API for an invite that will never be real); on 0.23.x (no `mode: enr`) the waiting pod has to run in `launchpad` mode with the user's real operator address, which polls the Obol API; prefer 0.24. Use `dkg.definition.url=<https-url>` or `dkg.definition.configMap=<name>` (`kubectl create configmap cluster-definition -n dv-pod --from-file=cluster-definition.json`) instead of a hash when the definition wasn't published. ENR-mode definitions need no signatures; address-mode ones still need every operator to sign on the Launchpad. One person running every node (a solo cluster) uses this route; the Launchpad solo flow isn't supported.
 
 ### Existing identity or cluster
 
@@ -128,7 +139,7 @@ kubectl get pods -n <ns> -l app.kubernetes.io/instance=<release> -o jsonpath='{r
 kubectl get configmap <fullname>-dkg-status -n <ns> -o jsonpath='{.data.phase} {.data.signatures} {.data.configHash} {.data.lockHash}{"\n"}{.data.message}{"\n"}'
 ```
 
-Summarise: phase (`Initializing`, `WaitingForInvite`, `WaitingForSignatures`, `DefinitionReady`, `RunningDKG`, `Complete`, `LockPresent`, `Failed`), container health (charon's pod readiness = `/readyz`), and any issue. On charts < 0.22 there is no status ConfigMap: use the `dkg-sidecar` logs and whether `/charon-data/cluster-lock.json` exists.
+Summarise: phase (`WaitingForDefinition` (mode `enr`: no pod, by design), `Initializing`, `WaitingForInvite`, `WaitingForSignatures`, `DefinitionReady`, `RunningDKG`, `Complete`, `LockPresent`, `Failed`), container health (charon's pod readiness = `/readyz`), and any issue. On charts < 0.22 there is no status ConfigMap: use the `dkg-sidecar` logs and whether `/charon-data/cluster-lock.json` exists.
 
 ## Action: logs
 
@@ -165,7 +176,7 @@ helm search repo obol/dv-pod --versions | head      # read the chart changelog/R
 helm upgrade <release> obol/dv-pod -n <ns> --version <chart-version> --reset-then-reuse-values [--set k=v] --timeout=10m
 ```
 
-Always pass an explicit `--version`. Use `--reset-then-reuse-values` (Helm 3.14+; the Obol Stack ships Helm 4): it keeps the user's overrides but picks up the new chart's defaults, which plain `--reuse-values` silently drops. Read the chart README's "Upgrading" section for every version you cross. During a pending DKG, every operator should be on the same runner and charon version.
+In the Stack with `obol app`, use `obol app upgrade dv-pod/<id> --version <chart-version>` instead (see obol-stack.md). Always pass an explicit `--version`. Use `--reset-then-reuse-values` (Helm 3.14+; the Obol Stack ships Helm 4): it keeps the user's overrides but picks up the new chart's defaults, which plain `--reuse-values` silently drops. Read the chart README's "Upgrading" section for every version you cross. During a pending DKG, every operator should be on the same runner and charon version.
 
 - **From < 0.22**: don't until `charon-dkg-sidecar:1.1.0` is published (init containers run on every start); unknown keys now fail the strict schema.
 - **From < 0.23**: the charon container stops seeing the key shares. `containerSecurityContext` gains `runAsNonRoot`, `runAsUser: 1000` and `seccompProfile: RuntimeDefault`. If the user overrides it, keep charon non-root and without `CAP_SYS_ADMIN`, or it could unmount the tmpfs that hides the key shares. The rolling update only replaces a **Ready** pod, so check afterwards that this prints nothing:
@@ -173,6 +184,7 @@ Always pass an explicit `--version`. Use `--reset-then-reuse-values` (Helm 3.14+
   kubectl exec <fullname>-0 -n <ns> -c dv-pod -- ls -A /charon-data/validator_keys
   ```
   If it lists files, the pod kept the old spec: delete the pod (`kubectl delete pod <fullname>-0 -n <ns>`) so it restarts on the new one. Restarting skips a few duties, so tell the user first.
+- **From < 0.24**: charon v1.11.4 and newer default validator client images (none schedules Gloas on mainnet or Hoodi). The charon tag is a chart value, so plain `--reuse-values` keeps v1.11.3: use `--reset-then-reuse-values` or set `image.tag`. A release parked on a placeholder Launchpad invite can switch to `mode: enr`; its ENR Secret and PVCs are kept.
 
 ## Action: enr
 
@@ -211,6 +223,8 @@ Expected after the DKG: `cluster-lock.json`, `cluster-definition.json`, `deposit
 ## Action: destroy
 
 **Always ask for explicit confirmation**, offer a backup first, and warn about ENR/key loss and slashing if validators are active.
+
+In the Stack with obol v0.19+, `obol app delete dv-pod/<id>` removes only the release while PVCs or ENR Secrets exist; `--delete-data` removes everything (only after a backup and explicit confirmation). On obol < 0.19 `obol app delete` deletes the namespace with its PVCs: don't use it.
 
 ```bash
 helm uninstall <release> -n <ns>                                     # PVCs and ENR Secret are retained

@@ -20,12 +20,28 @@ Ethereum install knobs:
 
 - `--network mainnet|sepolia|hoodi`
 - `--execution-client reth|geth|nethermind|besu|erigon`
-- `--consensus-client lighthouse|prysm|teku|nimbus|lodestar|grandine|silver` (silver: alpha, amd64 hosts only, obol v0.18.0 or later; suggest a testnet first)
+- `--consensus-client lighthouse|prysm|teku|nimbus|lodestar|grandine|silver` (silver: alpha, obol v0.18.0 or later; suggest a testnet first. v0.19 runs Silver alpha.23, amd64 and arm64, including Apple Silicon; v0.18 was amd64-only)
 - `--mode full|archive` *(default `full`)* — see "Full vs. archive" below.
 - `--since <preset|block|duration>` *(reth-only; with `--mode archive`)* — bounds the archive at a historical point so you don't have to keep history all the way back to genesis. See "Partial archive with `--since`" below.
 - `--execution-memory <size>` / `--consensus-memory <size>` *(e.g. `16Gi`)* — the client's memory **limit** (obol v0.18.0+; before that it was the request). Leave them unset: obol sizes each client per network, mode and client, and sync warns when a value is below the default limit. Only set one to give a client more room after it was OOM-killed, or to make a node fit on a small machine. Edit later as `executionMemory` / `consensusMemory` in the deployment's `values.yaml`, then `obol network sync`.
 
 **Memory (obol v0.18.0+)**: every client gets a memory request and limit, and is told its limit (`GOMEMLIMIT`, JVM/Node heap sizes, Nethermind's memory hint, reth's cache). Hoodi beacon nodes get mainnet-sized limits, because Hoodi's validator set is as large as mainnet's. `network install` and `sync` warn when the cluster's memory requests won't fit, and `sync` says when it will restart clients to apply new limits (data is kept). After upgrading obol, sync every node, since its requests may drop. Not enough memory: stop a node (`obol network stop <network>/<id>`) before lowering limits.
+
+**Client versions in obol v0.19.0** (pinned per release; `obol network sync` after upgrading obol moves a node to them):
+
+| Execution | Version | Consensus | Version |
+|---|---|---|---|
+| reth (default) | v2.11.0 | lighthouse (default) | v8.3.3 |
+| geth | v1.17.10 | prysm | v7.3.2 |
+| nethermind | 2.3.0-rc | teku | 26.11.0 |
+| besu | 26.11.3 | nimbus | v26.10.2 |
+| erigon | v3.8.2 | lodestar | v1.51.0 |
+| | | grandine | 2.0.6 |
+| | | silver | v0.1.0-alpha.23 |
+
+Nethermind is on a release candidate because 2.2.2 doesn't know Sepolia's Amsterdam fork (live since 2026-10-06).
+
+**Hoodi Gloas/Amsterdam fork (planned for epoch 143616, 2026-12-15 19:12:24 UTC).** In v0.19.0 only **Besu 26.11.3** and **Silver alpha.23** schedule it. Every other client, including the default reth + lighthouse pair, needs a later Stack release with client versions that do. Tell anyone running a Hoodi node in the Stack to upgrade obol and run `obol network sync` before that date, or their node stops following Hoodi at the fork. Don't suggest hand-pinning client pre-releases for it.
 
 **Client diversity nudge**: same as CDVN — if the user is running mainnet, push them off the default EL/CL to something non-majority. Rationale is network-level (correlated client failures hurt Ethereum) not just Stack-level.
 
@@ -73,11 +89,60 @@ Resulting endpoints (replace `<id>` with the deployment ID from `obol network li
 
 | What | In-cluster (pods, dv-pod, Hermes) | From the host |
 |---|---|---|
-| Execution JSON-RPC | `http://ethereum-execution.ethereum-<id>.svc.cluster.local:8545` | `obol kubectl port-forward -n ethereum-<id> svc/ethereum-execution 8545:8545` |
-| Beacon API | `http://ethereum-beacon.ethereum-<id>.svc.cluster.local:5052` | `obol kubectl port-forward -n ethereum-<id> svc/ethereum-beacon 5052:5052` |
+| Execution JSON-RPC | `http://ethereum-execution.ethereum-<id>.svc.cluster.local:8545` | `obol network expose ethereum/<id> --execution` (v0.19+), or `obol kubectl port-forward -n ethereum-<id> svc/ethereum-execution 8545:8545` |
+| Beacon API | `http://ethereum-beacon.ethereum-<id>.svc.cluster.local:5052` | `obol network expose ethereum/<id> --beacon` (v0.19+), or `obol kubectl port-forward -n ethereum-<id> svc/ethereum-beacon 5052:5052` |
 | Unified eRPC (chain data, load-balanced) | `http://erpc.erpc.svc.cluster.local/rpc/<network>` | `http://obol.stack/rpc/<network>` |
 
-The EL/CL ServiceMonitors carry `release: monitoring`, so the Stack's Prometheus (`monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090`) scrapes both clients. There are no per-node `obol.stack/ethereum-<id>/…` routes; port-forward to talk to one node directly. Each network namespace also has an `ethereum-<id>-metadata` ConfigMap listing its endpoints. `obol.stack` only resolves on the host (see the DNS gotcha in the main SKILL.md).
+The EL/CL ServiceMonitors carry `release: monitoring`, so the Stack's Prometheus (`monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090`) scrapes both clients. There are no per-node `obol.stack/ethereum-<id>/…` routes; use `network expose` or a port-forward to talk to one node directly. Each network namespace also has an `ethereum-<id>-metadata` ConfigMap listing its endpoints. `obol.stack` only resolves on the host (see the DNS gotcha in the main SKILL.md).
+
+### Use the node from Docker containers (`obol network expose`, v0.19+)
+
+For a charon, a test validator client or any other container on the same host that needs the Stack's node. It runs in the foreground until Ctrl-C, listens on `--bind` (default `127.0.0.1`), pipes each connection through a port-forward, checks the APIs every 15 s and reconnects when a pod restarts. It never exposes the engine API (8551). With neither `--beacon` nor `--execution` it forwards both.
+
+```bash
+# Docker Desktop (macOS/Windows): keep 127.0.0.1; containers use host.docker.internal
+obol network expose ethereum/<id> --beacon
+#   charon --beacon-node-endpoints=http://host.docker.internal:5052
+
+# Linux: bind the docker0 bridge address and use it from the container
+obol network expose ethereum/<id> --beacon --bind 172.17.0.1 --beacon-port 15052
+#   charon --beacon-node-endpoints=http://172.17.0.1:15052
+```
+
+Other flags: `--execution`, `--beacon-port` (5052), `--execution-port` (8545). `--bind` takes an IP literal; loopback and private (RFC 1918, IPv6 ULA) addresses are accepted. The node APIs have no authentication: **never suggest `--allow-public`** (needed for `0.0.0.0` or a public address) unless the user has a firewall that keeps the port off the internet, and say why. It refuses stopped and non-Ethereum deployments. Keep it running (a terminal, tmux, or a user service) for as long as the container needs the node.
+
+### Upgrades, your own image tags and the sync guard (v0.19+)
+
+`obol network sync` renders each node from the templates built into the `obol` binary, so a new obol brings new client versions. Before it does:
+
+- **Hand-set images**: if a client runs an image that matches neither the old pin, the new pin nor `overrides.yaml` (e.g. after `obol kubectl set image …`), sync warns that it will revert it and prints the `overrides.yaml` snippet that keeps it.
+- **Durable overrides**: `~/.config/obol/networks/ethereum/<id>/overrides.yaml` (under `$OBOL_CONFIG_DIR`) is merged last into the node's chart values and survives upgrades, e.g.
+  ```yaml
+  silver:
+    image:
+      tag: v0.1.0-alpha.23
+  ```
+- **Silver older than alpha.18**: alpha.18 changed Silver's data format, and v0.18.0 pinned alpha.13, so **every Silver node from v0.18 needs a fresh checkpoint sync** when it moves to v0.19. Sync detects it, prints the steps with the exact data path and asks (default No); without a terminal it needs `--yes`. obol never deletes node data itself. The steps:
+  ```bash
+  obol network stop ethereum/<id>
+  obol network sync ethereum/<id> --yes      # new image, still stopped
+  sudo find ~/.local/share/obol/ethereum-<id>/consensus-silver-<network> -mindepth 1 -delete   # data owned by the container user
+  obol network start ethereum/<id>           # Silver checkpoint-syncs from scratch (minutes on Hoodi)
+  ```
+  The data dir is `$OBOL_DATA_DIR` (default `~/.local/share/obol`); use the path sync prints. The execution client's data is kept. Have the user run the delete themselves after checking the path.
+- **Pods that were never Ready.** A StatefulSet only rolls Ready pods, so a client crash-looping before the upgrade would keep its old spec. `obol network sync` handles it: after up to a minute it deletes such pods (only never-Ready ones; data is kept) so they come back on the new spec. Only if the change was applied some other way, delete the pod yourself: `obol kubectl -n ethereum-<id> delete pod ethereum-beacon-0` (or the execution pod).
+- **Restart loops**: `obol doctor` warns when a node client keeps restarting (3+ restarts, the last within 24 h) and prints the `obol kubectl … logs --previous` command that shows why.
+
+**Silver notes (v0.19):**
+
+- Its beacon API answers only requests whose `Host` is an IP, `localhost`, or a name the Stack configures: the deployment's `ethereum-beacon` service names (bare, `.ethereum-<id>`, `.svc`, `.svc.cluster.local`) and `host.docker.internal`. Anything else gets `403 host not allowed`. Add names via `silver.config` in `overrides.yaml`; that key replaces the Stack's whole block, so repeat its lines (`beacon_api_allowed_hosts = [...]`, `metrics.enabled = true`, `metrics.bind = "0.0.0.0:5054"`). Never use `*`.
+- Metrics are on port 5054 (not the API port), scraped by their own ServiceMonitor.
+- If Silver misbehaves, run a second node with the default consensus client next to it (own namespace and data), then point consumers (e.g. a dv-pod's `charon.beaconNodeEndpoints`) at it:
+  ```bash
+  obol network install ethereum --network hoodi --consensus-client lighthouse --id hoodi-lighthouse
+  obol network sync ethereum/hoodi-lighthouse
+  ```
+  On Hoodi, remember that Lighthouse in v0.19 doesn't schedule the Gloas fork (see above).
 
 ### Is the node synced?
 
@@ -88,7 +153,7 @@ A DV (or anything validating) needs a node that is **synced**, which means all o
 
 Check it, in order of preference:
 
-1. `obol network status ethereum/<id>` (or no argument for every node): pods, EL (`eth_syncing`, head, peers, version), CL (syncing, peers, version) and a verdict — `synced`, `syncing` (with progress), `waiting`, `degraded`, `el_offline`, `unreachable`, `not_deployed`. Gate on `synced` with no peer warnings; `obol -o json network status ethereum/<id>` → `.nodes[].verdict` for scripting. (CLIs before v0.16 show only eRPC health here; fall back to step 2.)
+1. `obol network status ethereum/<id>` (or no argument for every node): pods, EL (`eth_syncing`, head, peers, version), CL (syncing, peers, version) and a verdict — `synced`, `syncing` (with progress), `waiting`, `degraded`, `el_offline`, `unreachable`, `not_deployed`. Gate on `synced` with no peer warnings; `obol -o json network status ethereum/<id>` → `.nodes[].verdict` for scripting. (CLIs before v0.16 show only eRPC health here; fall back to step 2.) From v0.19 a node stopped with `obol network stop` shows since when, and roughly how many slots behind it will be when started (`stopped_for` in JSON); older stops show `time unknown`.
 2. Probe the APIs yourself through port-forwards (`obol kubectl -n ethereum-<id> port-forward svc/ethereum-beacon 5052:5052 &`, same for `svc/ethereum-execution 8545:8545`), then:
    ```bash
    curl -s localhost:5052/eth/v1/node/syncing | jq .data
@@ -108,32 +173,40 @@ Use `--mode full`. Mainnet: ≥2 TB fast SSD free (EL ~1 TB and growing, CL ~200
 
 The Stack runs no MEV-boost sidecar: until Gloas the beacon node builds blocks locally, and from Gloas (ePBS) builder bids arrive in-protocol over p2p, so relays and mev-boost no longer apply. A dv-pod on this node keeps `charon.builderApi: false`, and its DV cluster must agree to run without MEV.
 
-## Deploy your own service (the `obol-app` chart)
+## Deploy a Helm chart or your own service (`obol app`)
 
-The Stack's general-purpose "run any Dockerfile as a managed app" mechanism is the `obol-app` Helm chart shipped in `ObolNetwork/helm-charts`. It's a generic pod+service+HTTPRoute wrapper — it's NOT DV-specific and shouldn't be confused with `dv-pod`.
-
-Two common patterns:
-
-**(a) Install an off-the-shelf Artifact Hub chart:**
+`obol app` installs any Helm chart as a managed deployment: a directory `~/.config/obol/applications/<name>/<id>/` (`helmfile.yaml`, `values.yaml`, and from v0.19 `obol-app.yaml` with the release name and last synced revision), deployed with `obol app sync` and replayed on `obol stack up`. Install only writes config; **`sync` deploys**.
 
 ```bash
-obol app install bitnami/redis
-obol app install bitnami/postgresql@15.0.0          # pin a version
-obol app sync postgresql                            # deploy
-obol app list                                       # see what's installed
-obol app delete postgresql/eager-fox --force        # remove (petnames used for deployment IDs)
+obol app install bitnami/redis --set auth.enabled=false     # repo/chart[@version]
+obol app install bitnami/postgresql@15.0.0 --name mydb --id prod
+obol app install oci://registry-1.docker.io/bitnamicharts/redis --name cache --id prod
+obol app sync mydb/prod                                       # deploy (or re-deploy after editing values.yaml)
+obol app list
+obol app delete mydb/prod                                     # see "Delete" below
 ```
 
-**(b) Ship your own Dockerfile:**
+What v0.19 changed (check `obol version`; older CLIs behave differently, see the last bullet):
 
-1. Build + push the image to a registry the cluster can reach (Docker Hub / GHCR / a local registry).
-2. Write a `values.yaml` for `obol-app` — minimally `image.repository`, `image.tag`, ports to expose, env, resources. Schema is enforced via `values.schema.json` in the chart.
-3. Install via `obol app install obol/obol-app -f values.yaml` (or via `helmfile` for helmfile-managed persistence — see Stack's CLAUDE.md for the helmfile path).
-4. `obol app sync` to deploy.
+- **Chart references.** `repo/chart` looks the repo up in your local helm repos first (`obol helm repo list`), then the built-in alias **`obol`** (`https://obolnetwork.github.io/helm-charts`, e.g. `obol/dv-pod`, `obol/obol-app`), then ArtifactHub (which lists Obol's repo as `charon`). Direct `https://…/chart-x.y.z.tgz` and `oci://` work too.
+- **Names.** Namespace `<name>-<id>`; new installs also default the **release** to `<name>-<id>` (`--release <name>` to choose). Pre-v0.19 apps keep their old release name.
+- **values.yaml holds only the user's overrides** (`--values`, `--set`, plus a header pointing at `obol helm show values …`). Chart defaults are read on every sync, so a chart upgrade brings its new defaults. Charts that ship `values-examples/obol-stack.yaml` (dv-pod does) start from that file, comments included. Comments and key order survive, and number-like strings (`0x…` addresses, hashes) stay quoted so helm doesn't read them as floats. Edit the file, then `obol app sync` (or `obol app sync <app>/<id> --set k=v`, which is persisted into values.yaml).
+- **Drift guard.** Sync refuses when the live release was changed with `obol helm upgrade`/`rollback` since obol's last sync, naming the differing keys (never values): fold them into values.yaml, or `--force` to revert them. **Don't mix `obol helm upgrade` with an `obol app`-managed release.**
+- **Namespaces and existing releases.** `--namespace` and `--release` override the `<name>-<id>` defaults; namespaces the Stack owns (`kube-*`, `default`, `traefik`, `x402`, `llm`, `erpc`, `monitoring`, `obol-frontend`, `reloader`, `hermes-*`, `ethereum-*`, `aztec-*`) are refused. Install refuses when a helm release of the same name already exists there and obol app doesn't manage it; `--adopt` takes it over, seeding values.yaml from its current values (`helm get values`) and using its current revision as the sync baseline. Adopt at the chart version the release runs now (`obol helm list -n <ns>`), then upgrade separately.
+- **Chart upgrades**: `obol app upgrade <app>/<id> --version <v>` checks the repo has that version, sets `version:` in the app's `helmfile.yaml`, and syncs with the drift check; if the sync is refused for drift, helmfile.yaml goes back to the old version (`--force` overrides the check). values.yaml is untouched, so read the new chart's notes and example for new settings. A pre-v0.19 values.yaml that is a full copy of the old defaults gets a warning (it would keep old image tags pinned): slim it first with `obol app install <chart>@<new> --name <n> --id <id> --force --values <overrides.yaml>`. (Doing it by hand: edit `version:` in helmfile.yaml, then `obol app sync`.) Charts installed from a versioned `.tgz` URL can't be upgraded this way.
+- **Delete keeps data.** Before deleting, obol checks the namespace for PVCs and Secrets that look like key material (dv-pod key shares and ENR keys, keystores). If any exist, or it can't tell, it removes **only the helm release**; namespace, PVCs, Secrets and config stay, and `obol app sync` redeploys onto them. A namespace that also holds other helm releases (e.g. an adopted one in a namespace made by hand) is never deleted as a whole, and `--delete-data` then refuses and names the PVCs to delete. `--delete-data` deletes everything (type the app name on a terminal; `--delete-data --yes` without one). `--keep-data` always removes only the release. `--force` only skips the yes/no prompt and never deletes data. Before v0.19, `obol app delete` removed the whole namespace, PVCs included: on an older CLI never use it on anything holding keys.
+- **Secrets without echoing values**: `obol app secret set <app>/<id> <secret> --from-file key=<path>` (or `--from-env-file <file>`) reads the files itself and applies the Secret through kubectl stdin; values never appear in arguments or output. It creates the namespace if needed, so it can run before the first sync. `obol app secret list <app>/<id>` shows names, types and key names only. Have the user write the file; don't read it.
+- **Sell hints.** After a sync obol suggests `obol sell http …` for the app's Services, but never for validator/signer charts (dv-pod, charon, charon-relay, remote-signer) or Services on validator, signer or node ports (3600, 3610–3640, 5051/5052/5054, 5062, 7500, 8545/8546/8551, 9000/9001, 30303). Never suggest selling those yourself either.
 
-The chart's values surface is in `ObolNetwork/helm-charts/charts/obol-app/values.yaml`; read that file to see the full knob set before authoring a values file. Reference docs: `https://artifacthub.io/packages/helm/obol/obol-app`.
+Full guide: `ObolNetwork/obol-stack/docs/guides/apps.md`. A dv-pod in the Stack follows this flow too: see the `dvpod` skill's `obol-stack.md`.
 
-Exposed inside the cluster as a Kubernetes Service. To make it public and/or billable, go through the Cloudflare tunnel section below + the sell-side material in `agent-commerce.md`.
+**Ship your own Dockerfile** with the generic `obol-app` chart (a pod + Service + HTTPRoute wrapper, not DV-specific):
+
+1. Build and push the image to a registry the cluster can reach (Docker Hub, GHCR, a local registry).
+2. Write a values file for `obol-app`: at least `image.repository`, `image.tag`, the ports to expose, env and resources. The chart enforces `values.schema.json`; read `ObolNetwork/helm-charts/charts/obol-app/values.yaml` for the full knob set first.
+3. `obol app install obol/obol-app --name <svc> --id <id> --values my-values.yaml` (`-f` is `--force`, not a values file), then `obol app sync <svc>/<id>`.
+
+It runs as a Kubernetes Service in the cluster. To make it public and/or billable, use the tunnel section below and the sell-side material in `agent-commerce.md`.
 
 ## Public exposure via Cloudflare tunnel
 

@@ -42,13 +42,13 @@ Will every operator sign with a wallet on the DV Launchpad?
 
 **Route 1 detail.** Each operator installs a dv-pod with their own operator address (`dvpod` skill), reads the **pod's** public ENR (`obol kubectl get cm <fullname>-enr -n <ns> -o jsonpath='{.data.enr}'`, or the ENR Secret's public `enr` field on charts < 0.22), and pastes exactly that ENR on the Launchpad. An ENR generated anywhere else (a laptop `charon create enr`, an older pod) doesn't match the pod's key, and the pod waits forever. The chart and sidecar never sign anything: humans sign on the Launchpad, then every pod's sidecar sees the fully signed definition and runs the DKG automatically. All pods must be up at that moment.
 
-**Route 2 detail.** Each operator installs a dv-pod (any mode works for generating the ENR; use `mode: definition` once the hash exists) and sends their pod's ENR to the creator. The creator runs `charon create dkg --operator-enrs …` with those ENRs and `--publish`, then shares the config hash; each operator sets `mode: definition` + `dkg.definition.configHash`. Without `--publish`, share the file and use `dkg.definition.configMap` (or `.url` for an https URL). A single person running every node (solo cluster) uses this route — the Launchpad solo flow isn't supported by the dv-pod.
+**Route 2 detail.** Each operator installs a dv-pod identity-only (`mode: enr`, chart 0.24+: publishes the ENR, runs no pod, polls nothing) and sends their pod's ENR to the creator. Don't park pods on a placeholder Launchpad invite for this. The creator runs `charon create dkg --operator-enrs …` with those ENRs and `--publish`, then shares the config hash; each operator sets `mode: definition` + `dkg.definition.configHash`. Without `--publish`, share the file and use `dkg.definition.configMap` (or `.url` for an https URL). A single person running every node (solo cluster) uses this route — the Launchpad solo flow isn't supported by the dv-pod.
 
 ## Charon version gate — check before creating anything
 
 Charon's DKG rejects peers on a different **minor** version, and a definition must be one every operator's charon understands. Before `create dkg`:
 
-1. Get every operator's charon version. dv-pod: `obol kubectl get pod <fullname>-0 -n <ns> -o jsonpath='{.spec.containers[?(@.name=="dv-pod")].image}'` (the chart runs the DKG with that same image; chart 0.23 ships `v1.11.3`). CDVN/LCDVN: their `.env` `CHARON_VERSION`.
+1. Get every operator's charon version. dv-pod: `obol kubectl get pod <fullname>-0 -n <ns> -o jsonpath='{.spec.containers[?(@.name=="dv-pod")].image}'` (the chart runs the DKG with that same image; chart 0.24 ships `v1.11.4`, 0.23 `v1.11.3`; in `mode: enr` there is no pod yet, so read the chart version from `obol app list` / `helm list`). CDVN/LCDVN: their `.env` `CHARON_VERSION`.
 2. All must share one minor (e.g. all `v1.11.x`). If not, get them aligned first — don't "try it and see".
 3. Create the definition with the same minor (`obolnetwork/charon:v1.11.x create dkg`; v1.11 writes definition version `v1.11.0` by default). Check `jq -r .version .charon/cluster-definition.json`.
 4. Don't let anyone upgrade charon between definition and DKG.
@@ -125,12 +125,12 @@ Give the `dvpod` skill (once per operator) exactly this; don't let it guess:
 | Field | Route 1 | Route 2 |
 |---|---|---|
 | `network` | the definition's network | same |
-| `mode` | `launchpad` | `definition` |
+| `mode` | `launchpad` | `enr` until the definition exists, then `definition` |
 | identity | `charon.operatorAddress` = the address listed for this operator | — (the pod's ENR must be in the definition) |
 | definition | optional `charon.dkgSidecar.targetConfigHash` | `dkg.definition.configHash` (or `.url` / `.configMap`) |
 | charon | chart whose `image.tag` minor = the definition's | same |
 
-`dvpod` reports back the pod's ENR (`<fullname>-enr` ConfigMap) and the DKG phase (`<fullname>-dkg-status`: `WaitingForInvite` → `WaitingForSignatures` → `DefinitionReady` → `Complete`, or `Failed`).
+`dvpod` reports back the pod's ENR (`<fullname>-enr` ConfigMap) and the DKG phase (`<fullname>-dkg-status`: `WaitingForInvite` → `WaitingForSignatures` → `DefinitionReady` → `Complete`, or `Failed`; `WaitingForDefinition` while in `mode: enr`).
 
 ## Run the DKG ceremony
 
