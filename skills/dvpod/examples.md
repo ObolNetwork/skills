@@ -1,6 +1,6 @@
 # DVpod Deployment Examples
 
-All examples pin chart `0.23.0` and set `network` explicitly — check `helm search repo obol/dv-pod --versions` for a newer version (and its release notes) before using them. Replace every `0xYOUR_…`, `<beacon-url>` and hash. In the Obol Stack prefix `helm`/`kubectl` with `obol` and start from [obol-stack.md](obol-stack.md).
+All examples pin chart `0.24.0` (charon v1.11.4) and set `network` explicitly — check `helm search repo obol/dv-pod --versions` for a newer version (and its release notes) before using them. Replace every `0xYOUR_…`, `<beacon-url>` and hash. In the Obol Stack (obol v0.19+) don't use these `helm` commands: install with `obol app install obol/dv-pod@0.24.0 --name dv-pod --id <network> --set …` + `obol app sync` and change values.yaml, as in [obol-stack.md](obol-stack.md); the values below carry over as `--set`s or values.yaml keys.
 
 ```bash
 helm repo add obol https://obolnetwork.github.io/helm-charts
@@ -10,7 +10,7 @@ helm repo update
 ## Example 1: Launchpad route (hoodi)
 
 ```bash
-helm upgrade --install dv-pod-hoodi obol/dv-pod --version 0.23.0 \
+helm upgrade --install dv-pod-hoodi obol/dv-pod --version 0.24.0 \
   --namespace dv-pod --create-namespace \
   --set mode=launchpad \
   --set network=hoodi \
@@ -26,10 +26,20 @@ Join one specific invite: add `--set charon.dkgSidecar.targetConfigHash=0x<64 he
 
 ## Example 2: Direct route (definition from `charon create dkg`)
 
-After Example 1 (or any install) produced the pod's ENR and the creator published a definition containing it:
+Hand out the ENR first with an identity-only install (chart 0.24+; no pod, no Obol API polling, phase `WaitingForDefinition`):
 
 ```bash
-helm upgrade dv-pod-hoodi obol/dv-pod --version 0.23.0 -n dv-pod --reset-then-reuse-values \
+helm upgrade --install dv-pod-hoodi obol/dv-pod --version 0.24.0 \
+  --namespace dv-pod --create-namespace \
+  --set mode=enr --set network=hoodi \
+  --set 'charon.beaconNodeEndpoints[0]=<beacon-url>'
+kubectl get configmap dv-pod-hoodi-enr -n dv-pod -o jsonpath='{.data.enr}'
+```
+
+Once the creator published a definition containing that ENR, switch the same release (the ENR is kept; the pod starts now):
+
+```bash
+helm upgrade dv-pod-hoodi obol/dv-pod --version 0.24.0 -n dv-pod --reset-then-reuse-values \
   --set mode=definition \
   --set dkg.definition.configHash=0xCONFIG_HASH \
   --timeout=10m
@@ -39,7 +49,7 @@ From an unpublished file instead:
 
 ```bash
 kubectl create configmap cluster-definition -n dv-pod --from-file=cluster-definition.json
-helm upgrade dv-pod-hoodi obol/dv-pod --version 0.23.0 -n dv-pod --reset-then-reuse-values \
+helm upgrade dv-pod-hoodi obol/dv-pod --version 0.24.0 -n dv-pod --reset-then-reuse-values \
   --set mode=definition --set dkg.definition.configMap=cluster-definition --timeout=10m
 ```
 
@@ -48,7 +58,7 @@ See the chart's `values-examples/definition.yaml`.
 ## Example 3: Mainnet with fallbacks and a minority VC
 
 ```bash
-helm upgrade --install dv-pod-mainnet obol/dv-pod --version 0.23.0 \
+helm upgrade --install dv-pod-mainnet obol/dv-pod --version 0.24.0 \
   --namespace dv-pod --create-namespace \
   --set mode=launchpad \
   --set network=mainnet \
@@ -68,7 +78,7 @@ Each release gets its own `<fullname>-enr-key` identity on charts ≥ 0.22. Each
 
 ```bash
 for i in 0 1 2 3; do
-  helm upgrade --install dv-pod-$i obol/dv-pod --version 0.23.0 \
+  helm upgrade --install dv-pod-$i obol/dv-pod --version 0.24.0 \
     --namespace dv-pod --create-namespace \
     --set mode=launchpad \
     --set network=hoodi \
@@ -92,7 +102,7 @@ kubectl create namespace dv-pod --dry-run=client -o yaml | kubectl apply -f -
 kubectl create secret generic my-enr -n dv-pod \
   --from-file=charon-enr-private-key=<path-to>/charon-enr-private-key
 
-helm upgrade --install dv-pod-hoodi obol/dv-pod --version 0.23.0 \
+helm upgrade --install dv-pod-hoodi obol/dv-pod --version 0.24.0 \
   --namespace dv-pod \
   --set mode=launchpad \
   --set network=hoodi \
@@ -125,7 +135,7 @@ Never take a token in chat or as a Helm value (`centralMonitoring.token` lands i
 ## Example 7: Production-leaning settings
 
 ```bash
-helm upgrade --install dv-pod-mainnet obol/dv-pod --version 0.23.0 \
+helm upgrade --install dv-pod-mainnet obol/dv-pod --version 0.24.0 \
   --namespace dv-prod --create-namespace \
   --set mode=launchpad \
   --set network=mainnet \

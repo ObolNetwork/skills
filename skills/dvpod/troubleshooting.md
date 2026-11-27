@@ -39,7 +39,8 @@ kubectl get configmap <fullname>-enr -n <ns> -o jsonpath='{.data.enr}{"\n"}{.dat
 
 ### Interpreting Results Quickly
 
-- `WaitingForInvite` / `WaitingForSignatures` are normal until every operator has signed; persistent `WaitingForInvite` usually means an operator-address or ENR mismatch.
+- `WaitingForDefinition` with no pod is `mode: enr` working as designed: switch to `definition`/`launchpad` once the definition exists.
+- `WaitingForInvite` / `WaitingForSignatures` are normal until every operator has signed; persistent `WaitingForInvite` usually means an operator-address or ENR mismatch. A release switched from a placeholder invite to `mode: enr` can briefly show `WaitingForInvite` again; re-run the same upgrade/sync to restore `WaitingForDefinition`.
 - `DefinitionReady` / `RunningDKG` that don't move: other operators' pods aren't online, or run a different charon minor.
 - Phase not `Complete` / `LockPresent` (or, on charts < 0.22, no `/charon-data/cluster-lock.json`) means the DKG has not completed.
 - Charon restart loops with beacon errors usually indicate bad/unreachable `charon.beaconNodeEndpoints`.

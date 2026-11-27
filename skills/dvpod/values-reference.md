@@ -1,18 +1,18 @@
 # DVpod Values Reference
 
-The values that matter most for `dv-pod` chart **0.23.x** (charon `v1.11.3`). The chart's [values.yaml](https://github.com/ObolNetwork/helm-charts/blob/main/charts/dv-pod/values.yaml) and README are the source of truth; read them for anything not listed. The schema is strict: unknown keys fail `helm install`.
+The values that matter most for `dv-pod` chart **0.24.x** (charon `v1.11.4`). The chart's [values.yaml](https://github.com/ObolNetwork/helm-charts/blob/main/charts/dv-pod/values.yaml) and README are the source of truth; read them for anything not listed. The schema is strict: unknown keys fail `helm install`.
 
 ## Essentials
 
 | Value | Description | Default |
 |-------|-------------|---------|
-| `network` | `mainnet`, `sepolia`, `hoodi` (chain ID derived). **Always set explicitly** | `mainnet` |
+| `network` | `mainnet`, `sepolia`, `hoodi` (chain ID derived). **Always set explicitly**. Sepolia has forked into Gloas, which charon v1.11.x doesn't support | `mainnet` |
 | `mode` | How the node joins its cluster — see below | `auto` |
 | `charon.operatorAddress` | Operator wallet that signs on the Launchpad. Required for `mode: launchpad` (and `auto` without lock/definition) | `""` |
 | `charon.beaconNodeEndpoints` | Synced beacon API(s); all are called for every request. Empty = the Obol Stack's node for `network` (`http://ethereum-beacon.ethereum-<network>.svc.cluster.local:5052`); **set it** outside the Stack or when the Stack deployment has another id. | `[]` |
 | `charon.fallbackBeaconNodeEndpoints` | Used when the primaries fail | `[]` |
 | `charon.publicnodeFallback` | With no fallbacks set, fall back to publicnode.com's beacon API for `network` | `true` |
-| `image.tag` | Charon version (also runs the DKG with `dkg.runner: charon`) | `v1.11.3` (the chart's `appVersion`) |
+| `image.tag` | Charon version (also runs the DKG with `dkg.runner: charon`). A chart value: plain `--reuse-values` keeps the old one, use `--reset-then-reuse-values` | `v1.11.4` (the chart's `appVersion`) |
 
 ## Modes
 
@@ -23,6 +23,7 @@ The values that matter most for `dv-pod` chart **0.23.x** (charon `v1.11.3`). Th
 | `definition` | Direct route: a `charon create dkg` definition | exactly one of `dkg.definition.configHash` / `.url` / `.configMap` |
 | `lock` | Import an existing cluster, no DKG | `configMaps.clusterLock` (+ `validatorClient.keystores.secretName`) |
 | `lockHash` | Same, lock > 1 MB fetched from the Obol API | `charon.lockHash` (+ `validatorClient.keystores.secretName`) |
+| `enr` (0.24+) | Identity only, definition later: the ENR job runs, the StatefulSet has 0 replicas (no pod, no Obol API polling, no central-monitoring Prometheus), phase `WaitingForDefinition`. Switch the same release to `definition`/`launchpad` later; the ENR Secret is kept. Never set on a running validator | none |
 
 ## DKG
 
@@ -49,7 +50,7 @@ The values that matter most for `dv-pod` chart **0.23.x** (charon `v1.11.3`). Th
 | ConfigMap `<fullname>-dkg-status` | `phase`, `message`, `updatedAt`, `enr`, `operatorAddress`, `definitionSource`, `configHash`, `clusterName`, `signatures` (e.g. `3/4`), `lockHash`, `numValidators`, `sidecarVersion` |
 | `statusReaders` | `[{namespace, serviceAccount}]` granted get/watch on just those two ConfigMaps (no list). Obol Stack Hermes: `{namespace: hermes-obol-agent, serviceAccount: hermes}` |
 
-Phases: `Initializing`, `WaitingForInvite`, `WaitingForSignatures`, `DefinitionReady`, `RunningDKG` (sidecar runner only), `Complete`, `LockPresent`, `Failed`.
+Phases: `WaitingForDefinition` (`mode: enr`, written by the chart), `Initializing`, `WaitingForInvite`, `WaitingForSignatures`, `DefinitionReady`, `RunningDKG` (sidecar runner only), `Complete`, `LockPresent`, `Failed`.
 
 `<fullname>` is the release name if it contains `dv-pod`, else `<release>-dv-pod`. Name releases `dv-pod-<something>` to keep names predictable.
 

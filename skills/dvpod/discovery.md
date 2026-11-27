@@ -11,7 +11,7 @@ Try in order:
    ```bash
    helm list -A -o json | jq -r '.[] | select(.chart | startswith("dv-pod-")) | "\(.namespace)\t\(.name)\t\(.chart)"'
    ```
-3. Default `dv-pod`.
+3. Default: `dv-pod-<network>` for a dv-pod installed with `obol app` (obol v0.19+; `obol app list`), else `dv-pod`.
 
 If multiple namespaces have DVpod releases, ask the user which to target.
 
@@ -48,6 +48,8 @@ Public ConfigMaps (charts ≥ 0.22, readable without Secret access): `<fullname>
 
 ## Resolve current values
 
+For a dv-pod managed by `obol app`, the source of truth is the app's `values.yaml` (`~/.config/obol/applications/<name>/<id>/values.yaml`, overrides only); `helm get values` shows what was last deployed.
+
 ```bash
 helm get values <release> -n <namespace> -o json
 ```
@@ -63,5 +65,5 @@ Keys to inspect when reasoning about monitoring/logging:
 | `charon.nickname` | Appears as `cluster_name` label on Charon metrics |
 | `charon.logLevel` / `logFormat` | Verbosity and structure of stderr logs |
 | `network` | mainnet / sepolia / hoodi |
-| `mode` | auto / launchpad / definition / lock / lockHash |
+| `mode` | auto / launchpad / definition / lock / lockHash / enr |
 | `validatorClient.type` | Which VC implementation is running |
